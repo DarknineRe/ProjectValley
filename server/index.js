@@ -11,16 +11,13 @@ app.use(cors());
 app.use(express.json());
 
 function getWorkspaceId(req) {
-    return req.query.workspace_id || req.body?.workspaceId;
+    return req.query.workspace_id || req.body?.workspaceId || req.headers['x-workspace-id'];
 }
 
 function requireWorkspaceId(req, res) {
     const workspaceId = getWorkspaceId(req);
-    if (!workspaceId) {
-        res.status(400).json({ error: 'workspace_id (query) or workspaceId (body) is required' });
-        return null;
-    }
-    return workspaceId;
+    // Backward-compatible fallback so old clients won't fail hard
+    return workspaceId || 'default';
 }
 
 // --- Authentication API ---
