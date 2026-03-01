@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useAuth } from "./auth-context";
+import { API_BASE } from "../../api";
 
 export interface Workspace {
   id: string;
@@ -21,139 +22,157 @@ export interface WorkspaceMember {
 interface WorkspaceContextType {
   workspaces: Workspace[];
   currentWorkspace: Workspace | null;
-  setCurrentWorkspace: (workspace: Workspace) => void;
-  createWorkspace: (name: string) => void;
-  joinWorkspace: (code: string) => boolean;
+  setCurrentWorkspace: (workspace: Workspace | null) => void;
+  createWorkspace: (name: string) => Promise<void>;
+  joinWorkspace: (code: string) => Promise<boolean>;
+  deleteWorkspace: (workspaceId: string) => Promise<boolean>;
   inviteToWorkspace: (workspaceId: string, email: string) => void;
   getUserRole: () => "owner" | "employee" | null;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
-// Generate random 6-digit code
-const generateCode = () => {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-};
-
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
 
-  const [isLoaded, setIsLoaded] = useState(false);
+  const getCurrentWorkspaceKey = (userId: string) => `currentWorkspace:${userId}`;
 
-  useEffect(() => {
-    // Load workspaces from localStorage
-    const savedWorkspaces = localStorage.getItem("workspaces");
-    if (savedWorkspaces) {
-      try {
-        const parsed = JSON.parse(savedWorkspaces);
-        // Convert date strings back to Date objects
-        const workspacesWithDates = parsed.map((ws: any) => ({
-          ...ws,
-          createdAt: new Date(ws.createdAt),
-          members: ws.members.map((m: any) => ({
-            ...m,
-            joinedAt: new Date(m.joinedAt),
-          })),
-        }));
-        setWorkspaces(workspacesWithDates);
-      } catch (e) {
-        console.error("Failed to parse workspaces from localStorage", e);
-      }
+  const normalizeWorkspace = (ws: any): Workspace => ({
+    id: ws.id,
+    name: ws.name,
+    code: ws.code,
+    ownerId: ws.ownerId ?? ws.owner_id,
+    createdAt: new Date(ws.createdAt ?? ws.created_at),
+    members: (ws.members || []).map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      role: m.role,
+      joinedAt: new Date(m.joinedAt ?? m.joined_at),
+    })),
+  });
+
+  const fetchWorkspaces = async (userId: string) => {
+    const res = await fetch(`${API_BASE}/api/workspaces?user_id=${encodeURIComponent(userId)}`);
+    if (!res.ok) {
+      throw new Error("Failed to fetch workspaces");
     }
-
-    // Load current workspace
-    const savedCurrentWorkspace = localStorage.getItem("currentWorkspace");
-    if (savedCurrentWorkspace) {
-      try {
-        const parsed = JSON.parse(savedCurrentWorkspace);
-        setCurrentWorkspace({
-          ...parsed,
-          createdAt: new Date(parsed.createdAt),
-          members: parsed.members.map((m: any) => ({
-            ...m,
-            joinedAt: new Date(m.joinedAt),
-          })),
-        });
-      } catch (e) {
-        console.error("Failed to parse currentWorkspace from localStorage", e);
-      }
-    }
-    setIsLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isLoaded) return;
-    // Save workspaces to localStorage
-    if (workspaces.length > 0) {
-      localStorage.setItem("workspaces", JSON.stringify(workspaces));
-    }
-  }, [workspaces, isLoaded]);
-
-  useEffect(() => {
-    // Save current workspace to localStorage
-    if (currentWorkspace) {
-      localStorage.setItem("currentWorkspace", JSON.stringify(currentWorkspace));
-    }
-  }, [currentWorkspace]);
-
-  const createWorkspace = (name: string) => {
-    if (!user) return;
-
-    const newWorkspace: Workspace = {
-      id: Date.now().toString(),
-      name,
-      code: generateCode(),
-      ownerId: user.id,
-      createdAt: new Date(),
-      members: [
-        {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: "owner",
-          joinedAt: new Date(),
-        },
-      ],
-    };
-
-    setWorkspaces([...workspaces, newWorkspace]);
-    setCurrentWorkspace(newWorkspace);
+    const data = await res.json();
+    return data.map((ws: any) => normalizeWorkspace(ws));
   };
 
-  const joinWorkspace = (code: string): boolean => {
-    if (!user) return false;
-
-    const workspace = workspaces.find((ws) => ws.code === code.toUpperCase());
-    if (!workspace) return false;
-
-    // Check if user is already a member
-    const isMember = workspace.members.some((m) => m.id === user.id);
-    if (isMember) {
-      setCurrentWorkspace(workspace);
-      return true;
+  useEffect(() => {
+    if (!user?.id) {
+      setWorkspaces([]);
+      setCurrentWorkspace(null);
+      return;
     }
 
-    // Add user as employee
-    const updatedWorkspace: Workspace = {
-      ...workspace,
-      members: [
-        ...workspace.members,
-        {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: "employee",
-          joinedAt: new Date(),
-        },
-      ],
+    let isCancelled = false;
+
+    const load = async () => {
+      try {
+        const fetchedWorkspaces = await fetchWorkspaces(user.id);
+        if (isCancelled) return;
+
+        setWorkspaces(fetchedWorkspaces);
+
+        const storedWorkspaceId = localStorage.getItem(getCurrentWorkspaceKey(user.id));
+        const matched = storedWorkspaceId
+          ? fetchedWorkspaces.find((ws) => ws.id === storedWorkspaceId)
+          : null;
+
+        if (matched) {
+          setCurrentWorkspace(matched);
+        } else {
+          setCurrentWorkspace(fetchedWorkspaces[0] || null);
+        }
+      } catch (e) {
+        console.error("Failed to load workspaces", e);
+        if (!isCancelled) {
+          setWorkspaces([]);
+          setCurrentWorkspace(null);
+        }
+      }
     };
 
-    setWorkspaces(
-      workspaces.map((ws) => (ws.id === workspace.id ? updatedWorkspace : ws))
+    load();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (currentWorkspace?.id) {
+      localStorage.setItem(getCurrentWorkspaceKey(user.id), currentWorkspace.id);
+    } else {
+      localStorage.removeItem(getCurrentWorkspaceKey(user.id));
+    }
+  }, [currentWorkspace, user?.id]);
+
+  const createWorkspace = async (name: string) => {
+    if (!user) return;
+
+    const res = await fetch(`${API_BASE}/api/workspaces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, ownerId: user.id }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to create workspace");
+    }
+
+    const created = normalizeWorkspace(await res.json());
+    const nextWorkspaces = [created, ...workspaces];
+    setWorkspaces(nextWorkspaces);
+    setCurrentWorkspace(created);
+  };
+
+  const joinWorkspace = async (code: string): Promise<boolean> => {
+    if (!user) return false;
+
+    const res = await fetch(`${API_BASE}/api/workspaces/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code.toUpperCase(), userId: user.id }),
+    });
+
+    if (!res.ok) {
+      return false;
+    }
+
+    const joinedWorkspace = normalizeWorkspace(await res.json());
+    const refreshed = await fetchWorkspaces(user.id);
+    setWorkspaces(refreshed);
+    setCurrentWorkspace(
+      refreshed.find((ws) => ws.id === joinedWorkspace.id) || joinedWorkspace
     );
-    setCurrentWorkspace(updatedWorkspace);
+    return true;
+  };
+
+  const deleteWorkspace = async (workspaceId: string): Promise<boolean> => {
+    if (!user?.id) return false;
+
+    const res = await fetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}?user_id=${encodeURIComponent(user.id)}`,
+      { method: "DELETE" }
+    );
+
+    if (!res.ok) {
+      return false;
+    }
+
+    const nextWorkspaces = workspaces.filter((ws) => ws.id !== workspaceId);
+    setWorkspaces(nextWorkspaces);
+    if (currentWorkspace?.id === workspaceId) {
+      setCurrentWorkspace(nextWorkspaces[0] || null);
+    }
+
     return true;
   };
 
@@ -168,19 +187,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return member?.role || null;
   };
 
-  // Filter workspaces to show only those where user is a member
-  const userWorkspaces = workspaces.filter((ws) =>
-    ws.members.some((m) => m.id === user?.id)
-  );
-
   return (
     <WorkspaceContext.Provider
       value={{
-        workspaces: userWorkspaces,
+        workspaces,
         currentWorkspace,
         setCurrentWorkspace,
         createWorkspace,
         joinWorkspace,
+        deleteWorkspace,
         inviteToWorkspace,
         getUserRole,
       }}

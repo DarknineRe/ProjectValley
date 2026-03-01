@@ -20,6 +20,268 @@ function requireWorkspaceId(req, res) {
     return workspaceId || 'default';
 }
 
+function generateWorkspaceCode() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+async function generateUniqueWorkspaceCode() {
+    for (let i = 0; i < 10; i++) {
+        const code = generateWorkspaceCode();
+        const { rows } = await pool.query('SELECT id FROM workspaces WHERE code = $1 LIMIT 1', [code]);
+        if (rows.length === 0) {
+            return code;
+        }
+    }
+    throw new Error('Failed to generate unique workspace code');
+}
+
+// --- Workspaces API ---
+
+app.get('/api/workspaces', async (req, res) => {
+    try {
+        const userId = req.query.user_id;
+        if (!userId) {
+            return res.status(400).json({ error: 'user_id is required' });
+        }
+
+        const sql = `
+            SELECT
+                w.id,
+                w.name,
+                w.code,
+                w.owner_id,
+                w.created_at,
+                wm.user_id AS member_user_id,
+                wm.role AS member_role,
+                wm.joined_at AS member_joined_at,
+                u.name AS member_name,
+                u.email AS member_email
+            FROM workspaces w
+            JOIN workspace_members filter_wm ON filter_wm.workspace_id = w.id
+            JOIN workspace_members wm ON wm.workspace_id = w.id
+            JOIN users u ON u.id::text = wm.user_id
+            WHERE filter_wm.user_id = $1
+            ORDER BY w.created_at DESC, wm.joined_at ASC
+        `;
+
+        const { rows } = await pool.query(sql, [String(userId)]);
+
+        const workspaceMap = new Map();
+
+        for (const row of rows) {
+            if (!workspaceMap.has(row.id)) {
+                workspaceMap.set(row.id, {
+                    id: row.id,
+                    name: row.name,
+                    code: row.code,
+                    ownerId: row.owner_id,
+                    createdAt: row.created_at,
+                    members: []
+                });
+            }
+
+            workspaceMap.get(row.id).members.push({
+                id: row.member_user_id,
+                name: row.member_name,
+                email: row.member_email,
+                role: row.member_role,
+                joinedAt: row.member_joined_at
+            });
+        }
+
+        res.json(Array.from(workspaceMap.values()));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/workspaces', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { name, ownerId } = req.body;
+
+        if (!name || !ownerId) {
+            return res.status(400).json({ error: 'name and ownerId are required' });
+        }
+
+        await client.query('BEGIN');
+
+        const id = Date.now().toString();
+        const code = await generateUniqueWorkspaceCode();
+
+        await client.query(
+            'INSERT INTO workspaces (id, name, code, owner_id) VALUES ($1, $2, $3, $4)',
+            [id, name, code, String(ownerId)]
+        );
+
+        await client.query(
+            'INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, $3)',
+            [id, String(ownerId), 'owner']
+        );
+
+        await client.query('COMMIT');
+
+        const responseSql = `
+            SELECT
+                w.id,
+                w.name,
+                w.code,
+                w.owner_id,
+                w.created_at,
+                wm.user_id AS member_user_id,
+                wm.role AS member_role,
+                wm.joined_at AS member_joined_at,
+                u.name AS member_name,
+                u.email AS member_email
+            FROM workspaces w
+            JOIN workspace_members wm ON wm.workspace_id = w.id
+            JOIN users u ON u.id::text = wm.user_id
+            WHERE w.id = $1
+            ORDER BY wm.joined_at ASC
+        `;
+
+        const { rows } = await pool.query(responseSql, [id]);
+        const workspace = {
+            id,
+            name,
+            code,
+            ownerId: String(ownerId),
+            createdAt: rows[0]?.created_at || new Date().toISOString(),
+            members: rows.map((row) => ({
+                id: row.member_user_id,
+                name: row.member_name,
+                email: row.member_email,
+                role: row.member_role,
+                joinedAt: row.member_joined_at
+            }))
+        };
+
+        res.status(201).json(workspace);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(400).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/api/workspaces/join', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { code, userId } = req.body;
+
+        if (!code || !userId) {
+            return res.status(400).json({ error: 'code and userId are required' });
+        }
+
+        await client.query('BEGIN');
+
+        const { rows: workspaces } = await client.query(
+            'SELECT id, name, code, owner_id, created_at FROM workspaces WHERE code = $1 LIMIT 1',
+            [String(code).toUpperCase()]
+        );
+
+        if (workspaces.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Workspace not found' });
+        }
+
+        const workspace = workspaces[0];
+
+        await client.query(
+            `INSERT INTO workspace_members (workspace_id, user_id, role)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (workspace_id, user_id) DO NOTHING`,
+            [workspace.id, String(userId), 'employee']
+        );
+
+        await client.query('COMMIT');
+
+        const responseSql = `
+            SELECT
+                wm.user_id AS member_user_id,
+                wm.role AS member_role,
+                wm.joined_at AS member_joined_at,
+                u.name AS member_name,
+                u.email AS member_email
+            FROM workspace_members wm
+            JOIN users u ON u.id::text = wm.user_id
+            WHERE wm.workspace_id = $1
+            ORDER BY wm.joined_at ASC
+        `;
+
+        const { rows: memberRows } = await pool.query(responseSql, [workspace.id]);
+
+        res.json({
+            id: workspace.id,
+            name: workspace.name,
+            code: workspace.code,
+            ownerId: workspace.owner_id,
+            createdAt: workspace.created_at,
+            members: memberRows.map((row) => ({
+                id: row.member_user_id,
+                name: row.member_name,
+                email: row.member_email,
+                role: row.member_role,
+                joinedAt: row.member_joined_at
+            }))
+        });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(400).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete('/api/workspaces/:id', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const workspaceId = req.params.id;
+        const userId = req.query.user_id;
+
+        if (!workspaceId || !userId) {
+            return res.status(400).json({ error: 'workspace id and user_id are required' });
+        }
+
+        const { rows: workspaceRows } = await client.query(
+            'SELECT id, owner_id FROM workspaces WHERE id = $1 LIMIT 1',
+            [workspaceId]
+        );
+
+        if (workspaceRows.length === 0) {
+            return res.status(404).json({ error: 'Workspace not found' });
+        }
+
+        if (workspaceRows[0].owner_id !== String(userId)) {
+            return res.status(403).json({ error: 'Only workspace owner can delete this workspace' });
+        }
+
+        await client.query('BEGIN');
+
+        await client.query('DELETE FROM products WHERE workspace_id = $1', [workspaceId]);
+        await client.query('DELETE FROM schedules WHERE workspace_id = $1', [workspaceId]);
+        await client.query('DELETE FROM price_history WHERE workspace_id = $1', [workspaceId]);
+        await client.query('DELETE FROM market_prices WHERE workspace_id = $1', [workspaceId]);
+        await client.query('DELETE FROM activity_logs WHERE workspace_id = $1', [workspaceId]);
+
+        await client.query('DELETE FROM workspace_members WHERE workspace_id = $1', [workspaceId]);
+        const deleteResult = await client.query('DELETE FROM workspaces WHERE id = $1', [workspaceId]);
+
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            deleted: deleteResult.rowCount > 0
+        });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(400).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+});
+
 // --- Authentication API ---
 
 // shared login handler used by both /api/auth/login and /api/login

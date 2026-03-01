@@ -96,6 +96,26 @@ async function initializeDatabase() {
         `);
 
         await client.query(`
+            CREATE TABLE IF NOT EXISTS workspaces (
+                id VARCHAR(255) PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                code VARCHAR(20) NOT NULL UNIQUE,
+                owner_id VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS workspace_members (
+                workspace_id VARCHAR(255) NOT NULL,
+                user_id VARCHAR(255) NOT NULL,
+                role VARCHAR(50) NOT NULL DEFAULT 'employee',
+                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (workspace_id, user_id)
+            );
+        `);
+
+        await client.query(`
             CREATE TABLE IF NOT EXISTS products (
                 id VARCHAR(255) PRIMARY KEY,
                 workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',

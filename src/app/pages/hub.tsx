@@ -13,20 +13,39 @@ import {
   DialogTitle,
   DialogDescription,
 } from "../components/ui/dialog";
-import { Leaf, Plus, LogOut, Users, Code, ChevronRight, Building2, User } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
+import { Leaf, Plus, LogOut, Users, Code, ChevronRight, Building2, Trash2 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { Workspace } from "../context/workspace-context";
 
 export function Hub() {
   const { user, logout } = useAuth();
-  const { workspaces, createWorkspace, joinWorkspace, setCurrentWorkspace } =
+  const {
+    workspaces,
+    createWorkspace,
+    joinWorkspace,
+    deleteWorkspace,
+    setCurrentWorkspace,
+  } =
     useWorkspace();
   const navigate = useNavigate();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [joinCode, setJoinCode] = useState("");
+  const [workspaceToDelete, setWorkspaceToDelete] = useState<Workspace | null>(null);
+  const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -39,24 +58,28 @@ export function Hub() {
     return null;
   }
 
-  const handleCreateWorkspace = () => {
+  const handleCreateWorkspace = async () => {
     if (!newWorkspaceName.trim()) {
       toast.error("กรุณาใส่ชื่อ Workspace");
       return;
     }
-    createWorkspace(newWorkspaceName);
-    setIsCreateDialogOpen(false);
-    setNewWorkspaceName("");
-    toast.success("สร้าง Workspace สำเร็จ!");
-    navigate("/");
+    try {
+      await createWorkspace(newWorkspaceName.trim());
+      setIsCreateDialogOpen(false);
+      setNewWorkspaceName("");
+      toast.success("สร้าง Workspace สำเร็จ!");
+      navigate("/");
+    } catch (error) {
+      toast.error("ไม่สามารถสร้าง Workspace ได้");
+    }
   };
 
-  const handleJoinWorkspace = () => {
+  const handleJoinWorkspace = async () => {
     if (!joinCode.trim()) {
       toast.error("กรุณาใส่รหัส Workspace");
       return;
     }
-    const success = joinWorkspace(joinCode);
+    const success = await joinWorkspace(joinCode);
     if (success) {
       setIsJoinDialogOpen(false);
       setJoinCode("");
@@ -67,9 +90,27 @@ export function Hub() {
     }
   };
 
-  const handleSelectWorkspace = (workspace: any) => {
+  const handleSelectWorkspace = (workspace: Workspace) => {
     setCurrentWorkspace(workspace);
     navigate("/");
+  };
+
+  const handleDeleteWorkspace = async () => {
+    if (!workspaceToDelete) return;
+    setIsDeletingWorkspace(true);
+    try {
+      const success = await deleteWorkspace(workspaceToDelete.id);
+      if (success) {
+        toast.success("ลบ Workspace สำเร็จ");
+        setWorkspaceToDelete(null);
+      } else {
+        toast.error("ไม่สามารถลบ Workspace ได้");
+      }
+    } catch (error) {
+      toast.error("ไม่สามารถลบ Workspace ได้");
+    } finally {
+      setIsDeletingWorkspace(false);
+    }
   };
 
   const handleLogout = () => {
@@ -232,7 +273,23 @@ export function Hub() {
                             </div>
                           </div>
                         </div>
-                        <ChevronRight className="h-6 w-6 text-gray-400" />
+                        <div className="flex items-center gap-2">
+                          {isOwner && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="text-red-600 hover:text-red-700"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setWorkspaceToDelete(workspace);
+                              }}
+                              title="ลบ Workspace"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <ChevronRight className="h-6 w-6 text-gray-400" />
+                        </div>
                       </div>
                     </Card>
                   );
@@ -338,6 +395,32 @@ export function Hub() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={!!workspaceToDelete}
+        onOpenChange={(open) => {
+          if (!open) setWorkspaceToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>ลบ Workspace</AlertDialogTitle>
+            <AlertDialogDescription>
+              ต้องการลบ Workspace {workspaceToDelete?.name} ใช่หรือไม่? ข้อมูลทั้งหมดใน Workspace นี้จะถูกลบสำหรับสมาชิกทุกคน
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingWorkspace}>ยกเลิก</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteWorkspace}
+              disabled={isDeletingWorkspace}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeletingWorkspace ? "กำลังลบ..." : "ลบ Workspace"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
