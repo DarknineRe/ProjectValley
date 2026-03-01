@@ -385,7 +385,7 @@ app.post('/api/activity-logs', async (req, res) => {
         const { action, type, itemName, user, timestamp, details } = req.body;
         const id = Date.now().toString();
         const sql = `
-            INSERT INTO activity_logs (id, action, type, itemName, user, timestamp, details)
+            INSERT INTO activity_logs (id, action, type, itemName, "user", timestamp, details)
             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *
         `;
 

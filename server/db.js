@@ -150,7 +150,7 @@ async function initializeDatabase() {
                 action VARCHAR(100) NOT NULL,
                 type VARCHAR(50) NOT NULL,
                 itemName VARCHAR(255) NOT NULL,
-                user VARCHAR(255) NOT NULL,
+                "user" VARCHAR(255) NOT NULL,
                 timestamp VARCHAR(255) NOT NULL,
                 details TEXT NOT NULL
             );
