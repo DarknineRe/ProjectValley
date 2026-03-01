@@ -57,7 +57,7 @@ async function handleLogin(req, res) {
         console.error('[LOGIN] Error:', err.message, err.stack);
         res.status(500).json({ error: err.message });
     }
-}}
+}
 
 // shared register handler
 async function handleRegister(req, res) {
@@ -117,7 +117,7 @@ async function handleRegister(req, res) {
         console.error('[REGISTER] Error:', err.message, err.stack);
         res.status(500).json({ error: err.message });
     }
-}}
+}
 
 // mount both canonical and alias routes
 app.post('/api/auth/login', handleLogin);
