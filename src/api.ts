@@ -5,4 +5,5 @@
 // variable `VITE_API_BASE` to the full backend origin (e.g.
 // "https://farmvalley.onrender.com").
 
-export const API_BASE = import.meta.env.VITE_API_BASE || '';
+// Allow either VITE_API_URL or legacy VITE_API_BASE for the backend origin
+export const API_BASE = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE || '';

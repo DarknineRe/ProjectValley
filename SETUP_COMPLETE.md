@@ -188,6 +188,13 @@ User logged in successfully!
   - port 5432 is the default PostgreSQL port
   - backend service is running on Render instance `srv-d6hph914tr6s73bv8nf0` (URL `https://farmvalley.onrender.com`)
 
+### Frontend environment
+- create a `.env` (or set a variable on your host) containing:
+```env
+VITE_API_URL=https://farmvalley.onrender.com
+```
+  (the older `VITE_API_BASE` name still works as a fallback).
+
 ### Frontend deployment notes
 - When hosting the frontend separately from the backend, set an environment variable
   `VITE_API_BASE` to the backend URL (e.g. `https://farmvalley.onrender.com`).

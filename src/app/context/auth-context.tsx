@@ -36,7 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     console.log('login called, API_BASE=', API_BASE);
     try {
-      const url = `${API_BASE}/api/auth/login`;
+      // prefer explicit VITE_API_URL, otherwise use API_BASE helper
+      const base = import.meta.env.VITE_API_URL || API_BASE;
+      const url = `${base}/api/auth/login`;
       console.log('fetching login URL:', url);
       const response = await fetch(url, {
         method: 'POST',
@@ -75,7 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (name: string, email: string, password: string) => {
     console.log('register called, API_BASE=', API_BASE);
     try {
-      const url = `${API_BASE}/api/auth/register`;
+      const base = import.meta.env.VITE_API_URL || API_BASE;
+      const url = `${base}/api/auth/register`;
       console.log('fetching register URL:', url);
       const response = await fetch(url, {
         method: 'POST',
