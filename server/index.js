@@ -16,22 +16,34 @@ app.use(express.json());
 async function handleLogin(req, res) {
     try {
         const { email, password } = req.body;
+        console.log(`[LOGIN] Attempt for email: ${email}`);
 
         if (!email || !password) {
+            console.warn('[LOGIN] Missing email or password');
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
         // Check if user exists in database
-        const { rows: users } = await pool.query(
-            'SELECT * FROM users WHERE email = $1 AND password = $2',
-            [email, password]
-        );
+        let users;
+        try {
+            const result = await pool.query(
+                'SELECT * FROM users WHERE email = $1 AND password = $2',
+                [email, password]
+            );
+            users = result.rows;
+            console.log(`[LOGIN] Database query returned ${users.length} user(s)`);
+        } catch (dbErr) {
+            console.error('[LOGIN] Database query failed:', dbErr.message);
+            throw dbErr;
+        }
 
         if (users.length === 0) {
+            console.warn(`[LOGIN] No user found with email ${email}`);
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
         const user = users[0];
+        console.log(`[LOGIN] Success: user ${user.email} (id=${user.id})`);
         res.json({
             success: true,
             user: {
@@ -42,35 +54,54 @@ async function handleLogin(req, res) {
             }
         });
     } catch (err) {
+        console.error('[LOGIN] Error:', err.message, err.stack);
         res.status(500).json({ error: err.message });
     }
-}
+}}
 
 // shared register handler
 async function handleRegister(req, res) {
     try {
         const { name, email, password } = req.body;
+        console.log(`[REGISTER] Attempt for email: ${email}`);
 
         if (!name || !email || !password) {
+            console.warn('[REGISTER] Missing name, email, or password');
             return res.status(400).json({ error: 'Name, email, and password are required' });
         }
 
         // Check if user already exists
-        const { rows: existingUsers } = await pool.query(
-            'SELECT * FROM users WHERE email = $1',
-            [email]
-        );
+        let existingUsers;
+        try {
+            const result = await pool.query(
+                'SELECT * FROM users WHERE email = $1',
+                [email]
+            );
+            existingUsers = result.rows;
+        } catch (dbErr) {
+            console.error('[REGISTER] Database query failed:', dbErr.message);
+            throw dbErr;
+        }
 
         if (existingUsers.length > 0) {
+            console.warn(`[REGISTER] Email ${email} already exists`);
             return res.status(409).json({ error: 'Email already exists' });
         }
 
         // Insert new user and return generated id
-        const insertResult = await pool.query(
-            'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id',
-            [name, email, password, 'farmer']
-        );
+        let insertResult;
+        try {
+            insertResult = await pool.query(
+                'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id',
+                [name, email, password, 'farmer']
+            );
+        } catch (dbErr) {
+            console.error('[REGISTER] Insert failed:', dbErr.message);
+            throw dbErr;
+        }
+
         const newUserId = insertResult.rows[0].id;
+        console.log(`[REGISTER] Success: new user ${email} (id=${newUserId})`);
 
         res.status(201).json({
             success: true,
@@ -83,9 +114,10 @@ async function handleRegister(req, res) {
             }
         });
     } catch (err) {
+        console.error('[REGISTER] Error:', err.message, err.stack);
         res.status(500).json({ error: err.message });
     }
-}
+}}
 
 // mount both canonical and alias routes
 app.post('/api/auth/login', handleLogin);
@@ -502,7 +534,15 @@ app.post('/api/market-prices/compare', async (req, res) => {
 // --- Start Server ---
 
 app.listen(port, () => {
-    console.log(`Backend server running at http://localhost:${port}`);
+    console.log('\n========================================');
+    console.log(`✅ Backend server running at http://localhost:${port}`);
+    console.log('========================================');
+    console.log('\nAvailable auth endpoints:');
+    console.log('  POST /api/auth/login');
+    console.log('  POST /api/login  (alias)');
+    console.log('  POST /api/auth/register');
+    console.log('  POST /api/register  (alias)');
+    console.log('\n========================================\n');
     
     // Start automatic market price scheduler (runs daily at 6 AM)
     priceScheduler.startScheduler(6, 0);
