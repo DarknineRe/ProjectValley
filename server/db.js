@@ -98,6 +98,7 @@ async function initializeDatabase() {
         await client.query(`
             CREATE TABLE IF NOT EXISTS products (
                 id VARCHAR(255) PRIMARY KEY,
+                workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
                 name VARCHAR(255) NOT NULL,
                 category VARCHAR(100) NOT NULL,
                 quantity INT NOT NULL,
@@ -111,10 +112,20 @@ async function initializeDatabase() {
         await client.query(`
             ALTER TABLE products ALTER COLUMN minStock SET DEFAULT 0;
         `);
+        await client.query(`
+            ALTER TABLE products ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(255);
+        `);
+        await client.query(`
+            UPDATE products SET workspace_id = 'default' WHERE workspace_id IS NULL;
+        `);
+        await client.query(`
+            ALTER TABLE products ALTER COLUMN workspace_id SET NOT NULL;
+        `);
 
         await client.query(`
             CREATE TABLE IF NOT EXISTS schedules (
                 id VARCHAR(255) PRIMARY KEY,
+                workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
                 cropName VARCHAR(255) NOT NULL,
                 category VARCHAR(100) NOT NULL,
                 plantingDate VARCHAR(255) NOT NULL,
@@ -125,18 +136,38 @@ async function initializeDatabase() {
                 notes TEXT
             );
         `);
+        await client.query(`
+            ALTER TABLE schedules ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(255);
+        `);
+        await client.query(`
+            UPDATE schedules SET workspace_id = 'default' WHERE workspace_id IS NULL;
+        `);
+        await client.query(`
+            ALTER TABLE schedules ALTER COLUMN workspace_id SET NOT NULL;
+        `);
 
         await client.query(`
             CREATE TABLE IF NOT EXISTS price_history (
                 id SERIAL PRIMARY KEY,
+                workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
                 date VARCHAR(50) NOT NULL,
                 cropData JSON NOT NULL
             );
+        `);
+        await client.query(`
+            ALTER TABLE price_history ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(255);
+        `);
+        await client.query(`
+            UPDATE price_history SET workspace_id = 'default' WHERE workspace_id IS NULL;
+        `);
+        await client.query(`
+            ALTER TABLE price_history ALTER COLUMN workspace_id SET NOT NULL;
         `);
 
         await client.query(`
             CREATE TABLE IF NOT EXISTS market_prices (
                 id SERIAL PRIMARY KEY,
+                workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
                 date DATE NOT NULL,
                 product_id VARCHAR(50) NOT NULL,
                 product_name VARCHAR(255),
@@ -144,13 +175,32 @@ async function initializeDatabase() {
                 max_price DECIMAL(10, 2),
                 avg_price DECIMAL(10, 2) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE (date, product_id)
+                UNIQUE (workspace_id, date, product_id)
             );
+        `);
+        await client.query(`
+            ALTER TABLE market_prices ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(255);
+        `);
+        await client.query(`
+            UPDATE market_prices SET workspace_id = 'default' WHERE workspace_id IS NULL;
+        `);
+        await client.query(`
+            ALTER TABLE market_prices ALTER COLUMN workspace_id SET NOT NULL;
+        `);
+        await client.query(`
+            ALTER TABLE market_prices DROP CONSTRAINT IF EXISTS market_prices_date_product_id_key;
+        `);
+        await client.query(`
+            ALTER TABLE market_prices DROP CONSTRAINT IF EXISTS market_prices_workspace_date_product_key;
+        `);
+        await client.query(`
+            ALTER TABLE market_prices ADD CONSTRAINT market_prices_workspace_date_product_key UNIQUE (workspace_id, date, product_id);
         `);
 
         await client.query(`
             CREATE TABLE IF NOT EXISTS activity_logs (
                 id VARCHAR(255) PRIMARY KEY,
+                workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
                 action VARCHAR(100) NOT NULL,
                 type VARCHAR(50) NOT NULL,
                 itemName VARCHAR(255) NOT NULL,
@@ -158,6 +208,15 @@ async function initializeDatabase() {
                 timestamp TIMESTAMP NOT NULL,
                 details TEXT NOT NULL
             );
+        `);
+        await client.query(`
+            ALTER TABLE activity_logs ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(255);
+        `);
+        await client.query(`
+            UPDATE activity_logs SET workspace_id = 'default' WHERE workspace_id IS NULL;
+        `);
+        await client.query(`
+            ALTER TABLE activity_logs ALTER COLUMN workspace_id SET NOT NULL;
         `);
         // ensure existing column is timestamp and convert if necessary
         await client.query(`

@@ -9,6 +9,7 @@
 
 const { fetchMarketPrice, PRODUCT_MAP } = require('./market-price-service');
 const pool = require('./db');
+const SYSTEM_WORKSPACE_ID = 'default';
 
 // List of products to track
 const PRODUCTS_TO_TRACK = [
@@ -36,15 +37,16 @@ async function fetchAndStoreMarketPrices(date = null) {
             if (priceData.avgPrice !== null) {
                 // Store in database
                 const sql = `
-                    INSERT INTO market_prices (date, product_id, product_name, min_price, max_price, avg_price) 
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                    ON CONFLICT (date, product_id) DO UPDATE SET
+                    INSERT INTO market_prices (workspace_id, date, product_id, product_name, min_price, max_price, avg_price) 
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT (workspace_id, date, product_id) DO UPDATE SET
                         min_price = EXCLUDED.min_price,
                         max_price = EXCLUDED.max_price,
                         avg_price = EXCLUDED.avg_price
                 `;
                 
                 await pool.query(sql, [
+                    SYSTEM_WORKSPACE_ID,
                     targetDate,
                     priceData.productId,
                     priceData.productName,

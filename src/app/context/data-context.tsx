@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { toast } from "sonner";
 import { API_BASE } from "../../api";
+import { useWorkspace } from "./workspace-context";
 
 export interface Product {
   id: string;
@@ -72,6 +73,7 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
+  const { currentWorkspace } = useWorkspace();
   const [products, setProducts] = useState<Product[]>([]);
   const [schedules, setSchedules] = useState<PlantingSchedule[]>([]);
   const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
@@ -105,13 +107,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // helper to load all data; used on mount and after rollbacks
   const loadData = async () => {
+    if (!currentWorkspace?.id) {
+      setProducts([]);
+      setSchedules([]);
+      setPriceHistory([]);
+      setActivityLogs([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
+      const workspaceQuery = `workspace_id=${encodeURIComponent(currentWorkspace.id)}`;
       const [productsRes, schedulesRes, priceHistoryRes, activityLogsRes] = await Promise.all([
-        fetch(`${API_BASE}/api/products`),
-        fetch(`${API_BASE}/api/schedules`),
-        fetch(`${API_BASE}/api/price-history`),
-        fetch(`${API_BASE}/api/activity-logs`)
+        fetch(`${API_BASE}/api/products?${workspaceQuery}`),
+        fetch(`${API_BASE}/api/schedules?${workspaceQuery}`),
+        fetch(`${API_BASE}/api/price-history?${workspaceQuery}`),
+        fetch(`${API_BASE}/api/activity-logs?${workspaceQuery}`)
       ]);
 
       if (productsRes.ok) {
@@ -146,16 +158,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Fetch initial data on mount
   useEffect(() => {
     loadData();
-  }, []);
+  }, [currentWorkspace?.id]);
 
   const addActivityLog = async (log: Omit<ActivityLog, "id">) => {
     try {
+      if (!currentWorkspace?.id) return;
       // ensure timestamp is ISO string
       const timestamp = log.timestamp instanceof Date ? log.timestamp.toISOString() : new Date().toISOString();
       const res = await fetch(`${API_BASE}/api/activity-logs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...log, timestamp })
+        body: JSON.stringify({ ...log, timestamp, workspaceId: currentWorkspace.id })
       });
       if (res.ok) {
         const newLog = await res.json();
@@ -168,7 +181,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const rollbackActivity = async (log: ActivityLog) => {
     try {
-      const res = await fetch(`${API_BASE}/api/activity-logs/${log.id}/rollback`, {
+      if (!currentWorkspace?.id) return;
+      const workspaceQuery = `workspace_id=${encodeURIComponent(currentWorkspace.id)}`;
+      const res = await fetch(`${API_BASE}/api/activity-logs/${log.id}/rollback?${workspaceQuery}`, {
         method: 'POST'
       });
       if (!res.ok) {
@@ -186,7 +201,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addProduct = async (product: Omit<Product, "id" | "lastUpdated">) => {
     try {
+      if (!currentWorkspace?.id) {
+        throw new Error("กรุณาเลือกพื้นที่ทำงานก่อน");
+      }
       const payload = {
+        workspaceId: currentWorkspace.id,
         name: product.name,
         category: product.category,
         quantity: product.quantity,
@@ -237,9 +256,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateProduct = async (updatedProduct: Product) => {
     try {
+      if (!currentWorkspace?.id) {
+        throw new Error("กรุณาเลือกพื้นที่ทำงานก่อน");
+      }
       const oldProduct = products.find(p => p.id === updatedProduct.id);
-      const payload = { ...updatedProduct, lastUpdated: new Date().toISOString() };
-      const res = await fetch(`${API_BASE}/api/products/${updatedProduct.id}`, {
+      const payload = { ...updatedProduct, workspaceId: currentWorkspace.id, lastUpdated: new Date().toISOString() };
+      const workspaceQuery = `workspace_id=${encodeURIComponent(currentWorkspace.id)}`;
+      const res = await fetch(`${API_BASE}/api/products/${updatedProduct.id}?${workspaceQuery}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -273,8 +296,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProduct = async (id: string) => {
     try {
+      if (!currentWorkspace?.id) {
+        throw new Error("กรุณาเลือกพื้นที่ทำงานก่อน");
+      }
       const product = products.find(p => p.id === id);
-      const res = await fetch(`${API_BASE}/api/products/${id}`, { method: 'DELETE' });
+      const workspaceQuery = `workspace_id=${encodeURIComponent(currentWorkspace.id)}`;
+      const res = await fetch(`${API_BASE}/api/products/${id}?${workspaceQuery}`, { method: 'DELETE' });
 
       if (!res.ok) throw new Error("Failed to delete product");
 
@@ -303,10 +330,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addSchedule = async (schedule: Omit<PlantingSchedule, "id">) => {
     try {
+      if (!currentWorkspace?.id) {
+        throw new Error("กรุณาเลือกพื้นที่ทำงานก่อน");
+      }
       const res = await fetch(`${API_BASE}/api/schedules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(schedule),
+        body: JSON.stringify({ ...schedule, workspaceId: currentWorkspace.id }),
       });
 
       if (!res.ok) throw new Error("Failed to add schedule");
@@ -336,11 +366,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateSchedule = async (updatedSchedule: PlantingSchedule) => {
     try {
+      if (!currentWorkspace?.id) {
+        throw new Error("กรุณาเลือกพื้นที่ทำงานก่อน");
+      }
       const oldSchedule = schedules.find(s => s.id === updatedSchedule.id);
-      const res = await fetch(`${API_BASE}/api/schedules/${updatedSchedule.id}`, {
+      const workspaceQuery = `workspace_id=${encodeURIComponent(currentWorkspace.id)}`;
+      const res = await fetch(`${API_BASE}/api/schedules/${updatedSchedule.id}?${workspaceQuery}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedSchedule),
+        body: JSON.stringify({ ...updatedSchedule, workspaceId: currentWorkspace.id }),
       });
 
       if (!res.ok) throw new Error("Failed to update schedule");
@@ -371,8 +405,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteSchedule = async (id: string) => {
     try {
+      if (!currentWorkspace?.id) {
+        throw new Error("กรุณาเลือกพื้นที่ทำงานก่อน");
+      }
       const schedule = schedules.find(s => s.id === id);
-      const res = await fetch(`${API_BASE}/api/schedules/${id}`, { method: 'DELETE' });
+      const workspaceQuery = `workspace_id=${encodeURIComponent(currentWorkspace.id)}`;
+      const res = await fetch(`${API_BASE}/api/schedules/${id}?${workspaceQuery}`, { method: 'DELETE' });
 
       if (!res.ok) throw new Error("Failed to delete schedule");
 

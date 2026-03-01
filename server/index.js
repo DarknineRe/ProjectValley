@@ -10,6 +10,19 @@ const port = 3001;
 app.use(cors());
 app.use(express.json());
 
+function getWorkspaceId(req) {
+    return req.query.workspace_id || req.body?.workspaceId;
+}
+
+function requireWorkspaceId(req, res) {
+    const workspaceId = getWorkspaceId(req);
+    if (!workspaceId) {
+        res.status(400).json({ error: 'workspace_id (query) or workspaceId (body) is required' });
+        return null;
+    }
+    return workspaceId;
+}
+
 // --- Authentication API ---
 
 // shared login handler used by both /api/auth/login and /api/login
@@ -240,7 +253,9 @@ app.post('/api/auth/google', async (req, res) => {
 
 app.get('/api/products', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM products');
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
+        const { rows } = await pool.query('SELECT * FROM products WHERE workspace_id = $1', [workspaceId]);
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -249,6 +264,8 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
     try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
         let { name, category, quantity, unit, minStock, harvestDate, lastUpdated } = req.body;
         // enforce non-null minStock; default to 0 if missing or null
         if (minStock === undefined || minStock === null) {
@@ -256,13 +273,13 @@ app.post('/api/products', async (req, res) => {
         }
         const id = Date.now().toString();
         const insertSql = `
-            INSERT INTO products (id, name, category, quantity, unit, minStock, harvestDate, lastUpdated)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO products (id, workspace_id, name, category, quantity, unit, minStock, harvestDate, lastUpdated)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING *
         `;
 
         const insertResult = await pool.query(insertSql, [
-            id, name, category, quantity, unit, minStock, harvestDate, lastUpdated
+            id, workspaceId, name, category, quantity, unit, minStock, harvestDate, lastUpdated
         ]);
         res.status(201).json(insertResult.rows[0]);
     } catch (err) {
@@ -272,6 +289,8 @@ app.post('/api/products', async (req, res) => {
 
 app.put('/api/products/:id', async (req, res) => {
     try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
         let { name, category, quantity, unit, minStock, harvestDate, lastUpdated } = req.body;
         if (minStock === undefined || minStock === null) {
             minStock = 0;
@@ -279,13 +298,16 @@ app.put('/api/products/:id', async (req, res) => {
         const sql = `
             UPDATE products
             SET name=$1, category=$2, quantity=$3, unit=$4, minStock=$5, harvestDate=$6, lastUpdated=$7
-            WHERE id=$8
+            WHERE id=$8 AND workspace_id=$9
             RETURNING *
         `;
 
         const result = await pool.query(sql, [
-            name, category, quantity, unit, minStock, harvestDate, lastUpdated, req.params.id
+            name, category, quantity, unit, minStock, harvestDate, lastUpdated, req.params.id, workspaceId
         ]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Product not found in this workspace' });
+        }
         res.json(result.rows[0]);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -294,7 +316,9 @@ app.put('/api/products/:id', async (req, res) => {
 
 app.delete('/api/products/:id', async (req, res) => {
     try {
-        const result = await pool.query('DELETE FROM products WHERE id = $1', [req.params.id]);
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
+        const result = await pool.query('DELETE FROM products WHERE id = $1 AND workspace_id = $2', [req.params.id, workspaceId]);
         res.json({ message: 'Deleted', changes: result.rowCount });
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -305,7 +329,9 @@ app.delete('/api/products/:id', async (req, res) => {
 
 app.get('/api/schedules', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM schedules');
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
+        const { rows } = await pool.query('SELECT * FROM schedules WHERE workspace_id = $1', [workspaceId]);
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -314,15 +340,17 @@ app.get('/api/schedules', async (req, res) => {
 
 app.post('/api/schedules', async (req, res) => {
     try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
         const { cropName, category, plantingDate, harvestDate, area, estimatedYield, status, notes } = req.body;
         const id = Date.now().toString();
         const sql = `
-            INSERT INTO schedules (id, cropName, category, plantingDate, harvestDate, area, estimatedYield, status, notes)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+            INSERT INTO schedules (id, workspace_id, cropName, category, plantingDate, harvestDate, area, estimatedYield, status, notes)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
         `;
 
         const result = await pool.query(sql, [
-            id, cropName, category, plantingDate, harvestDate, area, estimatedYield, status, notes
+            id, workspaceId, cropName, category, plantingDate, harvestDate, area, estimatedYield, status, notes
         ]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -332,19 +360,24 @@ app.post('/api/schedules', async (req, res) => {
 
 app.put('/api/schedules/:id', async (req, res) => {
     try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
         const { cropName, category, plantingDate, harvestDate, area, estimatedYield, status, notes } = req.body;
         const sql = `
             UPDATE schedules
             SET cropName=$1, category=$2, plantingDate=$3, harvestDate=$4,
                 area=$5, estimatedYield=$6, status=$7, notes=$8
-            WHERE id=$9
+            WHERE id=$9 AND workspace_id=$10
             RETURNING *
         `;
 
         const result = await pool.query(sql, [
             cropName, category, plantingDate, harvestDate, area,
-            estimatedYield, status, notes, req.params.id
+            estimatedYield, status, notes, req.params.id, workspaceId
         ]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Schedule not found in this workspace' });
+        }
         res.json(result.rows[0]);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -353,7 +386,9 @@ app.put('/api/schedules/:id', async (req, res) => {
 
 app.delete('/api/schedules/:id', async (req, res) => {
     try {
-        const result = await pool.query('DELETE FROM schedules WHERE id = $1', [req.params.id]);
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
+        const result = await pool.query('DELETE FROM schedules WHERE id = $1 AND workspace_id = $2', [req.params.id, workspaceId]);
         res.json({ message: 'Deleted', changes: result.rowCount });
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -364,17 +399,20 @@ app.delete('/api/schedules/:id', async (req, res) => {
 
 app.get('/api/price-history', async (req, res) => {
     try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
         // Primary source: normalized market_prices table
         const marketPriceSql = `
             SELECT to_char(date, 'YYYY-MM') AS period,
                    product_name,
                    AVG(avg_price)::float8 AS avg_price
             FROM market_prices
-            WHERE product_name IS NOT NULL AND product_name <> ''
+            WHERE workspace_id = $1
+              AND product_name IS NOT NULL AND product_name <> ''
             GROUP BY period, product_name
             ORDER BY period ASC
         `;
-        const { rows: marketRows } = await pool.query(marketPriceSql);
+        const { rows: marketRows } = await pool.query(marketPriceSql, [workspaceId]);
 
         if (marketRows.length > 0) {
             const grouped = new Map();
@@ -391,7 +429,7 @@ app.get('/api/price-history', async (req, res) => {
         }
 
         // Fallback source: legacy price_history table
-        const { rows } = await pool.query('SELECT * FROM price_history ORDER BY id ASC');
+        const { rows } = await pool.query('SELECT * FROM price_history WHERE workspace_id = $1 ORDER BY id ASC', [workspaceId]);
         const formattedRows = rows.map((r) => ({
             date: r.date,
             ...JSON.parse(r.cropData)
@@ -406,7 +444,9 @@ app.get('/api/price-history', async (req, res) => {
 
 app.get('/api/activity-logs', async (req, res) => {
     try {
-        const { rows } = await pool.query('SELECT * FROM activity_logs ORDER BY timestamp DESC LIMIT 50');
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
+        const { rows } = await pool.query('SELECT * FROM activity_logs WHERE workspace_id = $1 ORDER BY timestamp DESC LIMIT 50', [workspaceId]);
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -415,16 +455,18 @@ app.get('/api/activity-logs', async (req, res) => {
 
 app.post('/api/activity-logs', async (req, res) => {
     try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
         const { action, type, itemName, user, timestamp, details } = req.body;
         const id = Date.now().toString();
         // ensure ISO string for timestamp
         const ts = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
         const sql = `
-            INSERT INTO activity_logs (id, action, type, itemName, "user", timestamp, details)
-            VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *
+            INSERT INTO activity_logs (id, workspace_id, action, type, itemName, "user", timestamp, details)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
         `;
 
-        const result = await pool.query(sql, [id, action, type, itemName, user, ts, details]);
+        const result = await pool.query(sql, [id, workspaceId, action, type, itemName, user, ts, details]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -434,8 +476,10 @@ app.post('/api/activity-logs', async (req, res) => {
 // rollback endpoint for undoing logged actions
 app.post('/api/activity-logs/:id/rollback', async (req, res) => {
     try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
         const { id } = req.params;
-        const { rows } = await pool.query('SELECT * FROM activity_logs WHERE id = $1', [id]);
+        const { rows } = await pool.query('SELECT * FROM activity_logs WHERE id = $1 AND workspace_id = $2', [id, workspaceId]);
         if (rows.length === 0) {
             return res.status(404).json({ error: 'Log not found' });
         }
@@ -456,42 +500,61 @@ app.post('/api/activity-logs/:id/rollback', async (req, res) => {
         // helper functions for each type
         const rollbackProduct = async () => {
             if (log.action === 'add') {
-                await pool.query('DELETE FROM products WHERE id = $1', [itemId]);
+                await pool.query('DELETE FROM products WHERE id = $1 AND workspace_id = $2', [itemId, workspaceId]);
             } else if (log.action === 'delete') {
                 const prev = details.previous;
                 if (!prev) throw new Error('No previous product data');
                 await pool.query(
-                    `INSERT INTO products (id,name,category,quantity,unit,minStock,harvestDate,lastUpdated)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-                    [prev.id, prev.name, prev.category, prev.quantity, prev.unit, prev.minStock, prev.harvestDate, prev.lastUpdated]
+                    `INSERT INTO products (id,workspace_id,name,category,quantity,unit,minStock,harvestDate,lastUpdated)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                     ON CONFLICT (id) DO UPDATE SET
+                        workspace_id = EXCLUDED.workspace_id,
+                        name = EXCLUDED.name,
+                        category = EXCLUDED.category,
+                        quantity = EXCLUDED.quantity,
+                        unit = EXCLUDED.unit,
+                        minStock = EXCLUDED.minStock,
+                        harvestDate = EXCLUDED.harvestDate,
+                        lastUpdated = EXCLUDED.lastUpdated`,
+                    [prev.id, workspaceId, prev.name, prev.category, prev.quantity, prev.unit, prev.minStock, prev.harvestDate, prev.lastUpdated]
                 );
             } else if (log.action === 'update') {
                 const prev = details.previous;
                 if (!prev) throw new Error('No previous product data');
                 await pool.query(
-                    `UPDATE products SET name=$1, category=$2, quantity=$3, unit=$4, minStock=$5, harvestDate=$6, lastUpdated=$7 WHERE id=$8`,
-                    [prev.name, prev.category, prev.quantity, prev.unit, prev.minStock, prev.harvestDate, prev.lastUpdated, prev.id]
+                    `UPDATE products SET name=$1, category=$2, quantity=$3, unit=$4, minStock=$5, harvestDate=$6, lastUpdated=$7 WHERE id=$8 AND workspace_id=$9`,
+                    [prev.name, prev.category, prev.quantity, prev.unit, prev.minStock, prev.harvestDate, prev.lastUpdated, prev.id, workspaceId]
                 );
             }
         };
 
         const rollbackSchedule = async () => {
             if (log.action === 'add') {
-                await pool.query('DELETE FROM schedules WHERE id = $1', [itemId]);
+                await pool.query('DELETE FROM schedules WHERE id = $1 AND workspace_id = $2', [itemId, workspaceId]);
             } else if (log.action === 'delete') {
                 const prev = details.previous;
                 if (!prev) throw new Error('No previous schedule data');
                 await pool.query(
-                    `INSERT INTO schedules (id,cropName,category,plantingDate,harvestDate,area,estimatedYield,status,notes)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-                    [prev.id, prev.cropName, prev.category, prev.plantingDate, prev.harvestDate, prev.area, prev.estimatedYield, prev.status, prev.notes]
+                    `INSERT INTO schedules (id,workspace_id,cropName,category,plantingDate,harvestDate,area,estimatedYield,status,notes)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                     ON CONFLICT (id) DO UPDATE SET
+                        workspace_id = EXCLUDED.workspace_id,
+                        cropName = EXCLUDED.cropName,
+                        category = EXCLUDED.category,
+                        plantingDate = EXCLUDED.plantingDate,
+                        harvestDate = EXCLUDED.harvestDate,
+                        area = EXCLUDED.area,
+                        estimatedYield = EXCLUDED.estimatedYield,
+                        status = EXCLUDED.status,
+                        notes = EXCLUDED.notes`,
+                    [prev.id, workspaceId, prev.cropName, prev.category, prev.plantingDate, prev.harvestDate, prev.area, prev.estimatedYield, prev.status, prev.notes]
                 );
             } else if (log.action === 'update') {
                 const prev = details.previous;
                 if (!prev) throw new Error('No previous schedule data');
                 await pool.query(
-                    `UPDATE schedules SET cropName=$1, category=$2, plantingDate=$3, harvestDate=$4, area=$5, estimatedYield=$6, status=$7, notes=$8 WHERE id=$9`,
-                    [prev.cropName, prev.category, prev.plantingDate, prev.harvestDate, prev.area, prev.estimatedYield, prev.status, prev.notes, prev.id]
+                    `UPDATE schedules SET cropName=$1, category=$2, plantingDate=$3, harvestDate=$4, area=$5, estimatedYield=$6, status=$7, notes=$8 WHERE id=$9 AND workspace_id=$10`,
+                    [prev.cropName, prev.category, prev.plantingDate, prev.harvestDate, prev.area, prev.estimatedYield, prev.status, prev.notes, prev.id, workspaceId]
                 );
             }
         };
@@ -560,6 +623,8 @@ app.get('/api/market-prices/today', async (req, res) => {
  */
 app.post('/api/market-prices/store', async (req, res) => {
     try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
         const { date, productId, productName, minPrice, maxPrice, avgPrice } = req.body;
         
         if (!date || !productId || avgPrice === undefined) {
@@ -567,15 +632,15 @@ app.post('/api/market-prices/store', async (req, res) => {
         }
         
         const sql = `
-            INSERT INTO market_prices (date, product_id, product_name, min_price, max_price, avg_price)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (date, product_id)
+            INSERT INTO market_prices (workspace_id, date, product_id, product_name, min_price, max_price, avg_price)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (workspace_id, date, product_id)
             DO UPDATE SET min_price = EXCLUDED.min_price,
                           max_price = EXCLUDED.max_price,
                           avg_price = EXCLUDED.avg_price
         `;
         
-        await pool.query(sql, [date, productId, productName || '', minPrice, maxPrice, avgPrice]);
+        await pool.query(sql, [workspaceId, date, productId, productName || '', minPrice, maxPrice, avgPrice]);
         
         res.status(201).json({ 
             message: 'Market price stored successfully',
@@ -592,14 +657,16 @@ app.post('/api/market-prices/store', async (req, res) => {
  */
 app.get('/api/market-prices/history/:product_id', async (req, res) => {
     try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
         const { product_id } = req.params;
         const { from_date, to_date } = req.query;
         
-        let sql = 'SELECT * FROM market_prices WHERE product_id = $1';
-        const params = [product_id];
+        let sql = 'SELECT * FROM market_prices WHERE workspace_id = $1 AND product_id = $2';
+        const params = [workspaceId, product_id];
         
         if (from_date && to_date) {
-            sql += ' AND date BETWEEN $2 AND $3';
+            sql += ' AND date BETWEEN $3 AND $4';
             params.push(from_date, to_date);
         }
         
@@ -624,17 +691,19 @@ app.get('/api/market-prices/history/:product_id', async (req, res) => {
  */
 app.post('/api/market-prices/compare', async (req, res) => {
     try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
         const { date, product_ids } = req.body;
         
         if (!date || !product_ids || product_ids.length === 0) {
             return res.status(400).json({ error: 'Missing date or product_ids' });
         }
         
-        // build numbered placeholders starting at $2 since $1 is date
-        const placeholders = product_ids.map((_, i) => `$${i + 2}`).join(',');
-        const sql = `SELECT * FROM market_prices WHERE date = $1 AND product_id IN (${placeholders})`;
+        // build numbered placeholders starting at $3 ($1 workspace, $2 date)
+        const placeholders = product_ids.map((_, i) => `$${i + 3}`).join(',');
+        const sql = `SELECT * FROM market_prices WHERE workspace_id = $1 AND date = $2 AND product_id IN (${placeholders})`;
         
-        const { rows } = await pool.query(sql, [date, ...product_ids]);
+        const { rows } = await pool.query(sql, [workspaceId, date, ...product_ids]);
         
         res.json({
             date,
