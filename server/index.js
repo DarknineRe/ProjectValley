@@ -12,28 +12,25 @@ app.use(express.json());
 
 // --- Authentication API ---
 
-/**
- * Login - Verify user credentials against database
- * POST /api/auth/login
- */
-app.post('/api/auth/login', async (req, res) => {
+// shared login handler used by both /api/auth/login and /api/login
+async function handleLogin(req, res) {
     try {
         const { email, password } = req.body;
-        
+
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password are required' });
         }
-        
+
         // Check if user exists in database
         const { rows: users } = await pool.query(
             'SELECT * FROM users WHERE email = $1 AND password = $2',
             [email, password]
         );
-        
+
         if (users.length === 0) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
-        
+
         const user = users[0];
         res.json({
             success: true,
@@ -47,37 +44,34 @@ app.post('/api/auth/login', async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
-});
+}
 
-/**
- * Register - Create new user
- * POST /api/auth/register
- */
-app.post('/api/auth/register', async (req, res) => {
+// shared register handler
+async function handleRegister(req, res) {
     try {
         const { name, email, password } = req.body;
-        
+
         if (!name || !email || !password) {
             return res.status(400).json({ error: 'Name, email, and password are required' });
         }
-        
+
         // Check if user already exists
         const { rows: existingUsers } = await pool.query(
             'SELECT * FROM users WHERE email = $1',
             [email]
         );
-        
+
         if (existingUsers.length > 0) {
             return res.status(409).json({ error: 'Email already exists' });
         }
-        
+
         // Insert new user and return generated id
         const insertResult = await pool.query(
             'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id',
             [name, email, password, 'farmer']
         );
         const newUserId = insertResult.rows[0].id;
-        
+
         res.status(201).json({
             success: true,
             message: 'User registered successfully',
@@ -91,7 +85,14 @@ app.post('/api/auth/register', async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
-});
+}
+
+// mount both canonical and alias routes
+app.post('/api/auth/login', handleLogin);
+app.post('/api/login', handleLogin);
+
+app.post('/api/auth/register', handleRegister);
+app.post('/api/register', handleRegister);
 
 /**
  * Check if user exists
