@@ -689,10 +689,25 @@ app.get('/api/price-history', async (req, res) => {
 
         // Fallback source: legacy price_history table
         const { rows } = await pool.query('SELECT * FROM price_history WHERE workspace_id = $1 ORDER BY id ASC', [workspaceId]);
-        const formattedRows = rows.map((r) => ({
-            date: r.date,
-            ...JSON.parse(r.cropData)
-        }));
+        const formattedRows = rows.map((r) => {
+            const rawCropData = r.cropData ?? r.cropdata ?? {};
+
+            let parsedCropData = {};
+            if (typeof rawCropData === 'string') {
+                try {
+                    parsedCropData = JSON.parse(rawCropData);
+                } catch (_e) {
+                    parsedCropData = {};
+                }
+            } else if (rawCropData && typeof rawCropData === 'object') {
+                parsedCropData = rawCropData;
+            }
+
+            return {
+                date: r.date,
+                ...parsedCropData
+            };
+        });
         res.json(formattedRows);
     } catch (err) {
         res.status(500).json({ error: err.message });
