@@ -82,7 +82,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // utility to normalize backend rows to client models
   const normalizeProduct = (row: any) => ({
     id: row.id,
-    name: row.name,
+    name: row.name ?? row.product_name ?? row.productName ?? '',
     category: row.category,
     quantity: row.quantity,
     unit: row.unit,
@@ -211,13 +211,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const normalized = normalizeProduct(newProduct);
       setProducts(prev => [...prev, normalized]);
 
-      toast.success("เพิ่มสินค้าสำเร็จ", { description: `เพิ่ม ${product.name} เข้าสู่ระบบแล้ว` });
+      const productName = normalized.name || product.name || "สินค้าใหม่";
+
+      toast.success("เพิ่มสินค้าสำเร็จ", { description: `เพิ่ม ${productName} เข้าสู่ระบบแล้ว` });
 
       // record structured details for potential rollback
       await addActivityLog({
         action: "add",
         type: "product",
-        itemName: product.name,
+        itemName: productName,
         user: "admin",
         timestamp: new Date(),
         details: JSON.stringify({
