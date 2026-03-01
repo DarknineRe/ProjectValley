@@ -33,19 +33,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
+    console.log('login called, API_BASE=', API_BASE);
     try {
-      const response = await fetch(`${API_BASE}/api/auth/login`, {
+      const url = `${API_BASE}/api/auth/login`;
+      console.log('fetching login URL:', url);
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-
+      const text = await response.text();
+      // try to parse; if parse fails, log the full body for debugging
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        console.error('login response not JSON:', text);
+        throw new Error('Unexpected non-JSON response from server');
+      }
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Login failed');
+        throw new Error(data.error || 'Login failed');
       }
 
-      const data = await response.json();
+      // at this point `data` already contains the parsed body
       const mockUser: User = {
         id: data.user.id,
         name: data.user.name,
