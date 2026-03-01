@@ -160,14 +160,7 @@ export function Login() {
           </p>
         </div>
 
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-900 font-medium mb-2">
-            💡 สำหรับการทดสอบ
-          </p>
-          <p className="text-xs text-blue-700">
-            ใช้อีเมลและรหัสผ่านอะไรก็ได้เพื่อเข้าสู่ระบบ หรือคลิกปุ่ม Google เพื่อทดสอบการเข้าสู่ระบบด้วย Google
-          </p>
-        </div>
+
       </Card>
     </div>
   );

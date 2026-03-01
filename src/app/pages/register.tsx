@@ -210,14 +210,7 @@ export function Register() {
           </p>
         </div>
 
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-900 font-medium mb-2">
-            💡 สำหรับการทดสอบ
-          </p>
-          <p className="text-xs text-blue-700">
-            กรอกข้อมูลอะไรก็ได้เพื่อสมัครสมาชิก หรือคลิกปุ่ม Google เพื่อทดสอบ
-          </p>
-        </div>
+
       </Card>
     </div>
   );
