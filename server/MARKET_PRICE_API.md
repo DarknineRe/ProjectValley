@@ -2,6 +2,12 @@
 
 This backend integrates real market prices from Thailand's **Ministry of Commerce (MOC) Open Data API** to provide live agricultural product pricing information.
 
+Primary upstream source used by backend:
+- `https://dataapi.moc.go.th/gis-product-price`
+
+Fallback source (for compatibility):
+- `https://data.moc.go.th/OpenData/GISProductPrice`
+
 ## API Endpoints
 
 ### 1. Fetch Real-Time Market Price
@@ -244,7 +250,7 @@ CREATE TABLE market_prices (
 
 ## Notes
 
-- **Data Source**: Ministry of Commerce Thailand Open Data API
+- **Data Source**: Ministry of Commerce Thailand Open Data API (`dataapi.moc.go.th/gis-product-price`)
 - **Update Frequency**: Daily
 - **Duplicate Handling**: `ON DUPLICATE KEY UPDATE` prevents duplicate entries for the same product and date
 - **Rate Limiting**: MOC API may have rate limiting; implement appropriate delays between requests
