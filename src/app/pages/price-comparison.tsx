@@ -61,7 +61,7 @@ export function PriceComparison() {
             lastUpdated: row.date || row.created_at,
             source: "MOC Open Data",
           }))
-          .filter((item) => Number.isFinite(item.avgPrice) && item.avgPrice > 0);
+          .filter((item: MOCPriceData) => Number.isFinite(item.avgPrice) && item.avgPrice > 0);
 
         setVegetableMOCPrices(mapped);
       } catch {
@@ -73,9 +73,9 @@ export function PriceComparison() {
   }, [currentWorkspace?.id]);
 
   // จับคู่สินค้าในสต็อกกับราคาอ้างอิง
-  const matchedProducts = useMemo(() => products.map((product) => {
+  const matchedProducts = useMemo(() => products.map((product: any) => {
     const mocPrice = vegetableMOCPrices.find(
-      (moc) =>
+      (moc: MOCPriceData) =>
         moc.productName.toLowerCase().includes(product.name.toLowerCase()) ||
         product.name.toLowerCase().includes(moc.productName.toLowerCase()) ||
         (moc.category === product.category &&
@@ -106,8 +106,8 @@ export function PriceComparison() {
   };
 
   // แยกสินค้าที่มีและไม่มีข้อมูลราคาอ้างอิง
-  const productsWithMOC = matchedProducts.filter((p) => p.mocPrice);
-  const productsWithoutMOC = matchedProducts.filter((p) => !p.mocPrice);
+  const productsWithMOC = matchedProducts.filter((p: any) => p.mocPrice);
+  const productsWithoutMOC = matchedProducts.filter((p: any) => !p.mocPrice);
 
   return (
     <div className="space-y-6">
@@ -214,7 +214,7 @@ export function PriceComparison() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {productsWithMOC.map((product) => {
+                {productsWithMOC.map((product: any) => {
                   if (!product.mocPrice) return null;
                   
                   // ใช้ราคาจากฟิลด์ price ถ้ามี ถ้าไม่มีใช้ราคาเฉลี่ย MOC
@@ -295,7 +295,7 @@ export function PriceComparison() {
               </p>
               <div className="bg-white rounded-lg p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {productsWithoutMOC.map((product) => (
+                  {productsWithoutMOC.map((product: any) => (
                     <div
                       key={product.id}
                       className="flex items-center justify-between p-3 border border-gray-200 rounded-lg"
@@ -336,7 +336,7 @@ export function PriceComparison() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {vegetableMOCPrices.map((moc, index) => (
+              {vegetableMOCPrices.map((moc: MOCPriceData, index: number) => (
                 <TableRow key={index}>
                   <TableCell className="font-medium">{moc.productName}</TableCell>
                   <TableCell>
