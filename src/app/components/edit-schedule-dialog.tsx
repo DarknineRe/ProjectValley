@@ -142,7 +142,7 @@ export function EditScheduleDialog({
 
             <div className="space-y-2">
               <Label>วันที่ปลูก *</Label>
-              <Popover>
+              <Popover modal={true}>
                 <PopoverTrigger asChild>
                   <Button
                     type="button"
@@ -153,7 +153,7 @@ export function EditScheduleDialog({
                     {format(formData.plantingDate, "PPP", { locale: th })}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0 z-[120]" align="start">
                   <Calendar
                     mode="single"
                     selected={formData.plantingDate}
@@ -168,7 +168,7 @@ export function EditScheduleDialog({
 
             <div className="space-y-2">
               <Label>วันที่เก็บเกี่ยว *</Label>
-              <Popover>
+              <Popover modal={true}>
                 <PopoverTrigger asChild>
                   <Button
                     type="button"
@@ -179,7 +179,7 @@ export function EditScheduleDialog({
                     {format(formData.harvestDate, "PPP", { locale: th })}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+                <PopoverContent className="w-auto p-0 z-[120]" align="start">
                   <Calendar
                     mode="single"
                     selected={formData.harvestDate}

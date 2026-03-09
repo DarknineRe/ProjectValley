@@ -934,16 +934,21 @@ app.get('/api/price-history', async (req, res) => {
         const workspaceId = requireWorkspaceId(req, res);
         if (!workspaceId) return;
 
-        // Primary source: normalized market_prices table
+        // Source of truth: normalized market_prices table
         const marketPriceSql = `
-             SELECT period,
+            SELECT period,
                  normalized_name AS product_name,
                  AVG(avg_price)::float8 AS avg_price,
                  AVG(min_price)::float8 AS min_price,
                  AVG(max_price)::float8 AS max_price
              FROM (
-              SELECT to_char(date, 'YYYY-MM') AS period,
-                  regexp_replace(btrim(product_name), '\\s+(คละ|คัด)(?=\\s*\\(|$)', '', 'g') AS normalized_name,
+                SELECT to_char(date, 'YYYY-MM-DD') AS period,
+                       regexp_replace(
+                         regexp_replace(btrim(product_name), '\\s*\\(\\s*บาท\\s*\\/\\s*กก\\.?\\s*\\)\\s*', ' ', 'gi'),
+                         '\\s+(คละ|คัด)(?=\\s*\\(|$)',
+                         '',
+                         'g'
+                       ) AS normalized_name,
                   avg_price,
                   min_price,
                   max_price
@@ -964,54 +969,24 @@ app.get('/api/price-history', async (req, res) => {
             marketRows = fallbackResult.rows;
         }
 
-        if (marketRows.length > 0) {
-            const grouped = new Map();
+        const grouped = new Map();
 
-            for (const row of marketRows) {
-                if (!grouped.has(row.period)) {
-                    grouped.set(row.period, { date: row.period });
-                }
-                const target = grouped.get(row.period);
-                const avgPrice = Number(row.avg_price);
-                const minPrice = row.min_price === null ? avgPrice : Number(row.min_price);
-                const maxPrice = row.max_price === null ? avgPrice : Number(row.max_price);
-
-                target[row.product_name] = avgPrice;
-                // hidden keys for market min/max used by frontend analytics
-                target[`__min__${row.product_name}`] = minPrice;
-                target[`__max__${row.product_name}`] = maxPrice;
+        for (const row of marketRows) {
+            if (!grouped.has(row.period)) {
+                grouped.set(row.period, { date: row.period });
             }
+            const target = grouped.get(row.period);
+            const avgPrice = Number(row.avg_price);
+            const minPrice = row.min_price === null ? avgPrice : Number(row.min_price);
+            const maxPrice = row.max_price === null ? avgPrice : Number(row.max_price);
 
-            return res.json(Array.from(grouped.values()));
+            target[row.product_name] = avgPrice;
+            // hidden keys for market min/max used by frontend analytics
+            target[`__min__${row.product_name}`] = minPrice;
+            target[`__max__${row.product_name}`] = maxPrice;
         }
 
-        // Fallback source: legacy price_history table
-        let { rows } = await pool.query('SELECT * FROM price_history WHERE workspace_id = $1 ORDER BY id ASC', [workspaceId]);
-
-        if (rows.length === 0 && workspaceId !== 'default') {
-            const fallbackResult = await pool.query('SELECT * FROM price_history WHERE workspace_id = $1 ORDER BY id ASC', ['default']);
-            rows = fallbackResult.rows;
-        }
-        const formattedRows = rows.map((r) => {
-            const rawCropData = r.cropData ?? r.cropdata ?? {};
-
-            let parsedCropData = {};
-            if (typeof rawCropData === 'string') {
-                try {
-                    parsedCropData = JSON.parse(rawCropData);
-                } catch (_e) {
-                    parsedCropData = {};
-                }
-            } else if (rawCropData && typeof rawCropData === 'object') {
-                parsedCropData = rawCropData;
-            }
-
-            return {
-                date: r.date,
-                ...parsedCropData
-            };
-        });
-        res.json(formattedRows);
+        res.json(Array.from(grouped.values()));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
