@@ -969,6 +969,10 @@ app.get('/api/price-history', async (req, res) => {
             marketRows = fallbackResult.rows;
         }
 
+        if (marketRows.length === 0) {
+            return res.json([]);
+        }
+
         const grouped = new Map();
 
         for (const row of marketRows) {
@@ -986,7 +990,52 @@ app.get('/api/price-history', async (req, res) => {
             target[`__max__${row.product_name}`] = maxPrice;
         }
 
-        res.json(Array.from(grouped.values()));
+        const carryForwardEnabled = String(req.query.carry_forward ?? 'true').toLowerCase() !== 'false';
+        if (!carryForwardEnabled) {
+            return res.json(Array.from(grouped.values()));
+        }
+
+        const orderedDates = Array.from(grouped.keys()).sort();
+        const startDate = new Date(`${orderedDates[0]}T00:00:00.000Z`);
+        const endDate = new Date(`${orderedDates[orderedDates.length - 1]}T00:00:00.000Z`);
+
+        const byDate = new Map(Array.from(grouped.entries()));
+        const lastKnown = new Map();
+        const filled = [];
+
+        const formatDateKey = (date) => {
+            const y = date.getUTCFullYear();
+            const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const d = String(date.getUTCDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
+
+        const cursor = new Date(startDate);
+        while (cursor <= endDate) {
+            const dateKey = formatDateKey(cursor);
+            const source = byDate.get(dateKey) || { date: dateKey };
+
+            for (const key of Object.keys(source)) {
+                if (key === 'date' || key.startsWith('__')) continue;
+                lastKnown.set(key, {
+                    avg: source[key],
+                    min: source[`__min__${key}`],
+                    max: source[`__max__${key}`],
+                });
+            }
+
+            const row = { date: dateKey };
+            for (const [cropName, price] of lastKnown.entries()) {
+                row[cropName] = price.avg;
+                row[`__min__${cropName}`] = price.min;
+                row[`__max__${cropName}`] = price.max;
+            }
+
+            filled.push(row);
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+
+        res.json(filled);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1490,6 +1539,163 @@ app.post('/api/market-prices/maintenance/repair', async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * Fill missing daily rows in market_prices using carry-forward values.
+ * POST /api/market-prices/maintenance/fill-daily
+ * Body: {
+ *   workspaceId: "default",
+ *   fromDate: "2026-03-01", // optional, defaults to first available date
+ *   toDate: "2026-03-09"    // optional, defaults to latest available date
+ * }
+ */
+app.post('/api/market-prices/maintenance/fill-daily', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const {
+            workspaceId = 'default',
+            fromDate,
+            toDate
+        } = req.body || {};
+
+        const boundsSql = `
+            SELECT MIN(date)::date AS min_date, MAX(date)::date AS max_date
+            FROM market_prices
+            WHERE workspace_id = $1
+              AND product_id ~ '^P13(00[1-9]|0[1-8][0-9]|09[0-2])$'
+        `;
+        const bounds = await client.query(boundsSql, [workspaceId]);
+        const minDate = bounds.rows[0]?.min_date;
+        const maxDate = bounds.rows[0]?.max_date;
+
+        if (!minDate || !maxDate) {
+            return res.status(400).json({ error: 'No market price data found for this workspace' });
+        }
+
+        const startDate = new Date(`${fromDate || minDate.toISOString().slice(0, 10)}T00:00:00.000Z`);
+        const endDate = new Date(`${toDate || maxDate.toISOString().slice(0, 10)}T00:00:00.000Z`);
+
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+            return res.status(400).json({ error: 'Invalid fromDate/toDate format. Use YYYY-MM-DD' });
+        }
+        if (startDate > endDate) {
+            return res.status(400).json({ error: 'fromDate must be <= toDate' });
+        }
+
+        const rowsSql = `
+            SELECT date::date AS date,
+                   product_id,
+                   product_name,
+                   min_price,
+                   max_price,
+                   avg_price
+            FROM market_prices
+            WHERE workspace_id = $1
+              AND date::date <= $2::date
+              AND product_id ~ '^P13(00[1-9]|0[1-8][0-9]|09[0-2])$'
+            ORDER BY date ASC, product_id ASC
+        `;
+        const { rows } = await client.query(rowsSql, [workspaceId, endDate.toISOString().slice(0, 10)]);
+
+        if (rows.length === 0) {
+            return res.status(400).json({ error: 'No source rows available to fill this date range' });
+        }
+
+        const dateKey = (date) => {
+            const y = date.getUTCFullYear();
+            const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const d = String(date.getUTCDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        };
+
+        const existing = new Set();
+        const byDay = new Map();
+        const products = new Set();
+        for (const row of rows) {
+            const d = row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date).slice(0, 10);
+            existing.add(`${d}|${row.product_id}`);
+            products.add(row.product_id);
+            if (!byDay.has(d)) byDay.set(d, []);
+            byDay.get(d).push(row);
+        }
+
+        const lastKnown = new Map();
+        const inserts = [];
+        const cursor = new Date(startDate);
+        while (cursor <= endDate) {
+            const d = dateKey(cursor);
+            const todayRows = byDay.get(d) || [];
+
+            for (const row of todayRows) {
+                lastKnown.set(row.product_id, row);
+            }
+
+            for (const productId of products) {
+                const key = `${d}|${productId}`;
+                if (existing.has(key)) continue;
+                const prev = lastKnown.get(productId);
+                if (!prev) continue;
+
+                inserts.push([
+                    workspaceId,
+                    d,
+                    productId,
+                    normalizeMarketProductName(prev.product_name || ''),
+                    Number(prev.min_price),
+                    Number(prev.max_price),
+                    Number(prev.avg_price),
+                ]);
+            }
+
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+
+        if (inserts.length === 0) {
+            return res.json({
+                success: true,
+                workspaceId,
+                fromDate: dateKey(startDate),
+                toDate: dateKey(endDate),
+                insertedRows: 0,
+                message: 'No missing rows to fill',
+            });
+        }
+
+        await client.query('BEGIN');
+
+        const values = [];
+        const placeholders = inserts.map((row, i) => {
+            const base = i * 7;
+            values.push(...row);
+            return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
+        }).join(',');
+
+        const insertSql = `
+            INSERT INTO market_prices (workspace_id, date, product_id, product_name, min_price, max_price, avg_price)
+            VALUES ${placeholders}
+            ON CONFLICT (workspace_id, date, product_id)
+            DO NOTHING
+        `;
+        const inserted = await client.query(insertSql, values);
+
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            workspaceId,
+            fromDate: dateKey(startDate),
+            toDate: dateKey(endDate),
+            generatedRows: inserts.length,
+            insertedRows: inserted.rowCount || 0,
+            message: 'Missing daily rows filled successfully',
+        });
+    } catch (err) {
+        try { await client.query('ROLLBACK'); } catch (_) {}
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 });
 
