@@ -28,6 +28,13 @@ function isAllowedMarketProductId(productId) {
     return /^P13(00[1-9]|0[1-8][0-9]|09[0-2])$/i.test(String(productId || ''));
 }
 
+function normalizeMarketProductName(name) {
+    return String(name || '')
+        .replace(/\s+(คละ|คัด)(?=\s*\(|$)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 async function generateUniqueWorkspaceCode() {
     for (let i = 0; i < 10; i++) {
         const code = generateWorkspaceCode();
@@ -928,17 +935,26 @@ app.get('/api/price-history', async (req, res) => {
 
         // Primary source: normalized market_prices table
         const marketPriceSql = `
-            SELECT to_char(date, 'YYYY-MM') AS period,
-                   product_name,
-                                     AVG(avg_price)::float8 AS avg_price,
-                                     AVG(min_price)::float8 AS min_price,
-                                     AVG(max_price)::float8 AS max_price
-            FROM market_prices
-            WHERE workspace_id = $1
-                              AND product_id ~ '^P13(00[1-9]|0[1-8][0-9]|09[0-2])$'
-              AND product_name IS NOT NULL AND product_name <> ''
-            GROUP BY period, product_name
-            ORDER BY period ASC
+             SELECT period,
+                 normalized_name AS product_name,
+                 AVG(avg_price)::float8 AS avg_price,
+                 AVG(min_price)::float8 AS min_price,
+                 AVG(max_price)::float8 AS max_price
+             FROM (
+              SELECT to_char(date, 'YYYY-MM') AS period,
+                  regexp_replace(btrim(product_name), '\\s+(คละ|คัด)(?=\\s*\\(|$)', '', 'g') AS normalized_name,
+                  avg_price,
+                  min_price,
+                  max_price
+              FROM market_prices
+              WHERE workspace_id = $1
+                AND product_id ~ '^P13(00[1-9]|0[1-8][0-9]|09[0-2])$'
+                AND product_name IS NOT NULL
+                AND btrim(product_name) <> ''
+             ) filtered
+             WHERE normalized_name <> ''
+             GROUP BY period, normalized_name
+             ORDER BY period ASC
         `;
         let { rows: marketRows } = await pool.query(marketPriceSql, [workspaceId]);
 
@@ -1266,7 +1282,8 @@ app.post('/api/market-prices/store', async (req, res) => {
                           avg_price = EXCLUDED.avg_price
         `;
         
-        await pool.query(sql, [workspaceId, date, productId, productName || '', minPrice, maxPrice, avgPrice]);
+        const normalizedName = normalizeMarketProductName(productName || '');
+        await pool.query(sql, [workspaceId, date, productId, normalizedName, minPrice, maxPrice, avgPrice]);
         
         res.status(201).json({ 
             message: 'Market price stored successfully',
@@ -1327,14 +1344,23 @@ app.get('/api/market-prices/latest', async (req, res) => {
         const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 1000) : 200;
 
         const sql = `
-            SELECT *
+            SELECT
+                MAX(id) AS id,
+                workspace_id,
+                MAX(date) AS date,
+                MAX(product_id) AS product_id,
+                normalized_name AS product_name,
+                AVG(min_price)::float8 AS min_price,
+                AVG(max_price)::float8 AS max_price,
+                AVG(avg_price)::float8 AS avg_price,
+                MAX(created_at) AS created_at
             FROM (
-                SELECT DISTINCT ON (product_id)
+                SELECT
                     id,
                     workspace_id,
                     date,
                     product_id,
-                    product_name,
+                    regexp_replace(btrim(product_name), '\\s+(คละ|คัด)(?=\\s*\\(|$)', '', 'g') AS normalized_name,
                     min_price,
                     max_price,
                     avg_price,
@@ -1344,8 +1370,9 @@ app.get('/api/market-prices/latest', async (req, res) => {
                   AND product_id ~ '^P13(00[1-9]|0[1-8][0-9]|09[0-2])$'
                   AND product_name IS NOT NULL
                   AND btrim(product_name) <> ''
-                ORDER BY product_id, date DESC, created_at DESC
             ) latest
+            WHERE normalized_name <> ''
+            GROUP BY workspace_id, normalized_name
             ORDER BY date DESC, product_id ASC
             LIMIT $2
         `;

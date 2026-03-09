@@ -19,6 +19,13 @@ const EXTRA_P13_PRODUCTS = Array.from({ length: 92 }, (_, i) => {
     return { id, name: id };
 });
 
+function normalizeMarketProductName(name) {
+    return String(name || '')
+        .replace(/\s+(คละ|คัด)(?=\s*\(|$)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function isAllowedProduct(product) {
     const id = String(product?.id || '');
     return /^P13(00[1-9]|0[1-8][0-9]|09[0-2])$/i.test(id);
@@ -85,6 +92,7 @@ async function fetchAndStoreMarketPrices(date = null) {
                     (priceData.productName && String(priceData.productName).trim())
                         ? priceData.productName
                         : product.name;
+                const normalizedNameToStore = normalizeMarketProductName(productNameToStore);
 
                 // Store in database
                 const sql = `
@@ -101,7 +109,7 @@ async function fetchAndStoreMarketPrices(date = null) {
                     SYSTEM_WORKSPACE_ID,
                     targetDate,
                     priceData.productId,
-                    productNameToStore,
+                    normalizedNameToStore,
                     priceData.minPrice,
                     priceData.maxPrice,
                     priceData.avgPrice

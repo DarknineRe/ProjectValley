@@ -33,6 +33,13 @@ interface MOCPriceData {
   source: string;
 }
 
+function normalizeDisplayName(name: string) {
+  return String(name || "")
+    .replace(/\s+(คละ|คัด)(?=\s*\(|$)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function PriceComparison() {
   const { products } = useData();
   const { currentWorkspace } = useWorkspace();
@@ -52,7 +59,7 @@ export function PriceComparison() {
         const rows = await res.json();
         const mapped: MOCPriceData[] = (rows || [])
           .map((row: any) => ({
-            productName: row.product_name || row.productName || row.product_id,
+            productName: normalizeDisplayName(row.product_name || row.productName || row.product_id),
             category: "ผักสด",
             minPrice: Number(row.min_price ?? row.minPrice ?? row.avg_price ?? row.avgPrice ?? 0),
             maxPrice: Number(row.max_price ?? row.maxPrice ?? row.avg_price ?? row.avgPrice ?? 0),
@@ -74,13 +81,14 @@ export function PriceComparison() {
 
   // จับคู่สินค้าในสต็อกกับราคาอ้างอิง
   const matchedProducts = useMemo(() => products.map((product: any) => {
+    const normalizedProductName = normalizeDisplayName(product.name).toLowerCase();
     const mocPrice = vegetableMOCPrices.find(
       (moc: MOCPriceData) =>
-        moc.productName.toLowerCase().includes(product.name.toLowerCase()) ||
-        product.name.toLowerCase().includes(moc.productName.toLowerCase()) ||
+        moc.productName.toLowerCase().includes(normalizedProductName) ||
+        normalizedProductName.includes(moc.productName.toLowerCase()) ||
         (moc.category === product.category &&
           moc.productName.toLowerCase().split(" ")[0] ===
-            product.name.toLowerCase().split(" ")[0])
+            normalizedProductName.split(" ")[0])
     );
 
     return {
@@ -352,7 +360,7 @@ export function PriceComparison() {
             <TableBody>
               {vegetableMOCPrices.map((moc: MOCPriceData, index: number) => (
                 <TableRow key={index}>
-                  <TableCell className="font-medium">{moc.productName}</TableCell>
+                  <TableCell className="font-medium">{normalizeDisplayName(moc.productName)}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{moc.category}</Badge>
                   </TableCell>
