@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useData } from "../context/data-context";
 import { Card } from "../components/ui/card";
 import {
@@ -48,9 +48,14 @@ export function PriceAnalysis() {
     return Array.from(cropSet);
   }, [priceHistory]);
 
-  // Set default crop when available crops change
-  useMemo(() => {
-    if (availableCrops.length > 0 && !selectedCrop) {
+  // Set default crop when price data arrives or when current selection becomes invalid
+  useEffect(() => {
+    if (availableCrops.length === 0) {
+      if (selectedCrop) setSelectedCrop("");
+      return;
+    }
+
+    if (!selectedCrop || !availableCrops.includes(selectedCrop)) {
       setSelectedCrop(availableCrops[0]);
     }
   }, [availableCrops, selectedCrop]);

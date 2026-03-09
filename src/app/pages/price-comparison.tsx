@@ -214,7 +214,6 @@ export function PriceComparison() {
                 <TableRow>
                   <TableHead>ชื่อสินค้า</TableHead>
                   <TableHead>หมวดหมู่</TableHead>
-                  <TableHead className="text-right">ราคาปัจจุบัน</TableHead>
                   <TableHead className="text-right">ราคาอ้างอิง (MOC)</TableHead>
                   <TableHead className="text-center">ช่วงราคา</TableHead>
                   <TableHead className="text-center">เปรียบเทียบ</TableHead>
@@ -243,18 +242,6 @@ export function PriceComparison() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{product.category}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">
-                        {hasCurrentPrice ? (
-                          <>
-                            ฿{parsedCurrentPrice.toFixed(2)}
-                            <span className="text-xs text-gray-500 ml-1">
-                              /{product.mocPrice.unit}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-xs text-amber-700">ยังไม่ตั้งราคาในระบบ</span>
-                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="text-sm">
