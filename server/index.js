@@ -1315,6 +1315,55 @@ app.get('/api/market-prices/history/:product_id', async (req, res) => {
 });
 
 /**
+ * Get latest market prices per product (real DB data)
+ * GET /api/market-prices/latest?workspace_id=default&limit=200
+ */
+app.get('/api/market-prices/latest', async (req, res) => {
+    try {
+        const workspaceId = requireWorkspaceId(req, res);
+        if (!workspaceId) return;
+
+        const limit = Number(req.query.limit || 200);
+        const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 1000) : 200;
+
+        const sql = `
+            SELECT *
+            FROM (
+                SELECT DISTINCT ON (product_id)
+                    id,
+                    workspace_id,
+                    date,
+                    product_id,
+                    product_name,
+                    min_price,
+                    max_price,
+                    avg_price,
+                    created_at
+                FROM market_prices
+                WHERE workspace_id = $1
+                  AND product_id ~ '^(P12\\d{3}|P13(00[1-9]|0[1-8][0-9]|09[0-2]))$'
+                  AND product_name IS NOT NULL
+                  AND btrim(product_name) <> ''
+                ORDER BY product_id, date DESC, created_at DESC
+            ) latest
+            ORDER BY date DESC, product_id ASC
+            LIMIT $2
+        `;
+
+        let { rows } = await pool.query(sql, [workspaceId, safeLimit]);
+
+        if (rows.length === 0 && workspaceId !== 'default') {
+            const fallback = await pool.query(sql, ['default', safeLimit]);
+            rows = fallback.rows;
+        }
+
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
  * Compare prices for multiple products on the same date
  * POST /api/market-prices/compare
  * Body: { date: "2026-02-28", product_ids: ["P11012", "P14001"] }

@@ -22,11 +22,15 @@ import { Badge } from "../components/ui/badge";
 
 export function Dashboard() {
   const { products, schedules, priceHistory } = useData();
+  const fallbackLowStockThreshold = 10;
 
   const activePlantings = schedules.filter((s) => s.status === "planted").length;
   const plannedPlantings = schedules.filter((s) => s.status === "planned").length;
   const lowStockProducts = products
-    .filter((product) => product.minStock > 0 && product.quantity > 0 && product.quantity <= product.minStock)
+    .filter((product) => {
+      const threshold = product.minStock > 0 ? product.minStock : fallbackLowStockThreshold;
+      return product.quantity <= threshold;
+    })
     .sort((a, b) => a.quantity - b.quantity);
 
   const stats = [
@@ -165,7 +169,7 @@ export function Dashboard() {
                   <div>
                     <p className="font-medium text-gray-900">{product.name}</p>
                     <p className="text-sm text-amber-700">
-                      คงเหลือ {product.quantity.toLocaleString()} {product.unit} (ขั้นต่ำ {product.minStock.toLocaleString()} {product.unit})
+                      คงเหลือ {product.quantity.toLocaleString()} {product.unit} (ขั้นต่ำ {(product.minStock > 0 ? product.minStock : fallbackLowStockThreshold).toLocaleString()} {product.unit})
                     </p>
                   </div>
                   <Badge className="bg-amber-600">ใกล้หมด</Badge>

@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { useData } from "../context/data-context";
 import { Card } from "../components/ui/card";
 import {
@@ -18,8 +19,9 @@ import {
   Calendar,
 } from "lucide-react";
 import { Alert, AlertDescription } from "../components/ui/alert";
+import { API_BASE } from "../../api";
+import { useWorkspace } from "../context/workspace-context";
 
-// Mock data จำลองข้อมูลจากกระทรวงพาณิชย์
 interface MOCPriceData {
   productName: string;
   category: string;
@@ -31,117 +33,47 @@ interface MOCPriceData {
   source: string;
 }
 
-const mockMOCPrices: MOCPriceData[] = [
-  {
-    productName: "ข้าวหอมมะลิ",
-    category: "ข้าว",
-    minPrice: 15,
-    maxPrice: 18,
-    avgPrice: 16.5,
-    unit: "กิโลกรัม",
-    lastUpdated: "2026-02-28",
-    source: "ตลาดสี่มุมเมือง",
-  },
-  {
-    productName: "ข้าวเหนียว",
-    category: "ข้าว",
-    minPrice: 20,
-    maxPrice: 25,
-    avgPrice: 22.5,
-    unit: "กิโลกรัม",
-    lastUpdated: "2026-02-28",
-    source: "ตลาดสี่มุมเมือง",
-  },
-  {
-    productName: "มะม่วงน้ำดอกไม้",
-    category: "ผลไม้",
-    minPrice: 45,
-    maxPrice: 60,
-    avgPrice: 52.5,
-    unit: "กิโลกรัม",
-    lastUpdated: "2026-02-27",
-    source: "ตลาดไท",
-  },
-  {
-    productName: "มะม่วงพันธุ์อกร่อง",
-    category: "ผลไม้",
-    minPrice: 35,
-    maxPrice: 50,
-    avgPrice: 42.5,
-    unit: "กิโลกรัม",
-    lastUpdated: "2026-02-27",
-    source: "ตลาดไท",
-  },
-  {
-    productName: "ผักกาดหอม",
-    category: "ผักสด",
-    minPrice: 15,
-    maxPrice: 25,
-    avgPrice: 20,
-    unit: "กิโลกรัม",
-    lastUpdated: "2026-02-28",
-    source: "ตลาดไท",
-  },
-  {
-    productName: "ผักบุ้ง",
-    category: "ผักสด",
-    minPrice: 8,
-    maxPrice: 12,
-    avgPrice: 10,
-    unit: "กิโลกรัม",
-    lastUpdated: "2026-02-28",
-    source: "ตลาดไท",
-  },
-  {
-    productName: "มะเขือเทศ",
-    category: "ผักสด",
-    minPrice: 20,
-    maxPrice: 30,
-    avgPrice: 25,
-    unit: "กิโลกรัม",
-    lastUpdated: "2026-02-28",
-    source: "ตลาดไท",
-  },
-  {
-    productName: "กล้วยน้ำว้า",
-    category: "ผลไม้",
-    minPrice: 25,
-    maxPrice: 35,
-    avgPrice: 30,
-    unit: "กิโลกรัม",
-    lastUpdated: "2026-02-27",
-    source: "ตลาดไท",
-  },
-  {
-    productName: "ทุเรียนหมอนทอง",
-    category: "ผลไม้",
-    minPrice: 80,
-    maxPrice: 120,
-    avgPrice: 100,
-    unit: "กิโลกรัม",
-    lastUpdated: "2026-02-26",
-    source: "ตลาดไท",
-  },
-  {
-    productName: "มันสำปะหลัง",
-    category: "พืชหัว",
-    minPrice: 2.5,
-    maxPrice: 3.5,
-    avgPrice: 3,
-    unit: "กิโลกรัม",
-    lastUpdated: "2026-02-28",
-    source: "โรงงาน",
-  },
-];
-
 export function PriceComparison() {
   const { products } = useData();
-  const vegetableMOCPrices = mockMOCPrices.filter(
-    (moc) => moc.category === "ผักสด" && moc.unit === "กิโลกรัม"
-  );
+  const { currentWorkspace } = useWorkspace();
+  const [vegetableMOCPrices, setVegetableMOCPrices] = useState<MOCPriceData[]>([]);
+
+  useEffect(() => {
+    const loadLatestMarketPrices = async () => {
+      try {
+        const workspaceId = currentWorkspace?.id || "default";
+        const res = await fetch(
+          `${API_BASE}/api/market-prices/latest?workspace_id=${encodeURIComponent(workspaceId)}&limit=500`
+        );
+        if (!res.ok) {
+          setVegetableMOCPrices([]);
+          return;
+        }
+        const rows = await res.json();
+        const mapped: MOCPriceData[] = (rows || [])
+          .map((row: any) => ({
+            productName: row.product_name || row.productName || row.product_id,
+            category: "ผักสด",
+            minPrice: Number(row.min_price ?? row.minPrice ?? row.avg_price ?? row.avgPrice ?? 0),
+            maxPrice: Number(row.max_price ?? row.maxPrice ?? row.avg_price ?? row.avgPrice ?? 0),
+            avgPrice: Number(row.avg_price ?? row.avgPrice ?? 0),
+            unit: "กิโลกรัม",
+            lastUpdated: row.date || row.created_at,
+            source: "MOC Open Data",
+          }))
+          .filter((item) => Number.isFinite(item.avgPrice) && item.avgPrice > 0);
+
+        setVegetableMOCPrices(mapped);
+      } catch {
+        setVegetableMOCPrices([]);
+      }
+    };
+
+    loadLatestMarketPrices();
+  }, [currentWorkspace?.id]);
 
   // จับคู่สินค้าในสต็อกกับราคาอ้างอิง
-  const matchedProducts = products.map((product) => {
+  const matchedProducts = useMemo(() => products.map((product) => {
     const mocPrice = vegetableMOCPrices.find(
       (moc) =>
         moc.productName.toLowerCase().includes(product.name.toLowerCase()) ||
@@ -155,7 +87,7 @@ export function PriceComparison() {
       ...product,
       mocPrice,
     };
-  });
+  }), [products, vegetableMOCPrices]);
 
   const getPriceTrend = (currentPrice: number, mocAvgPrice: number) => {
     const diff = ((currentPrice - mocAvgPrice) / mocAvgPrice) * 100;
