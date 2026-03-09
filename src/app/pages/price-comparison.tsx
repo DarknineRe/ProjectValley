@@ -217,11 +217,15 @@ export function PriceComparison() {
                 {productsWithMOC.map((product: any) => {
                   if (!product.mocPrice) return null;
                   
-                  // ใช้ราคาจากฟิลด์ price ถ้ามี ถ้าไม่มีใช้ราคาเฉลี่ย MOC
-                  const currentPrice = (product as any).price || product.mocPrice.avgPrice;
-                  const trend = getPriceTrend(currentPrice, product.mocPrice.avgPrice);
-                  const badge = getPriceBadge(currentPrice, product.mocPrice.avgPrice);
-                  const TrendIcon = trend.icon;
+                  const parsedCurrentPrice = Number((product as any).price);
+                  const hasCurrentPrice = Number.isFinite(parsedCurrentPrice) && parsedCurrentPrice > 0;
+                  const trend = hasCurrentPrice
+                    ? getPriceTrend(parsedCurrentPrice, product.mocPrice.avgPrice)
+                    : null;
+                  const badge = hasCurrentPrice
+                    ? getPriceBadge(parsedCurrentPrice, product.mocPrice.avgPrice)
+                    : null;
+                  const TrendIcon = trend?.icon;
 
                   return (
                     <TableRow key={product.id}>
@@ -232,10 +236,16 @@ export function PriceComparison() {
                         <Badge variant="outline">{product.category}</Badge>
                       </TableCell>
                       <TableCell className="text-right font-semibold">
-                        ฿{currentPrice.toFixed(2)}
-                        <span className="text-xs text-gray-500 ml-1">
-                          /{product.mocPrice.unit}
-                        </span>
+                        {hasCurrentPrice ? (
+                          <>
+                            ฿{parsedCurrentPrice.toFixed(2)}
+                            <span className="text-xs text-gray-500 ml-1">
+                              /{product.mocPrice.unit}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-xs text-amber-700">ยังไม่ตั้งราคาในระบบ</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="text-sm">
@@ -251,10 +261,14 @@ export function PriceComparison() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <TrendIcon className={`h-4 w-4 ${trend.color}`} />
-                          <Badge variant={badge.variant}>{badge.label}</Badge>
-                        </div>
+                        {hasCurrentPrice && trend && badge && TrendIcon ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <TrendIcon className={`h-4 w-4 ${trend.color}`} />
+                            <Badge variant={badge.variant}>{badge.label}</Badge>
+                          </div>
+                        ) : (
+                          <Badge variant="secondary">รอตั้งราคา</Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-gray-600">
                         {product.mocPrice.source}
