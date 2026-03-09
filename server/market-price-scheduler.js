@@ -11,10 +11,7 @@ const { fetchMarketPrice, PRODUCT_MAP, fetchProductCatalog } = require('./market
 const pool = require('./db');
 const SYSTEM_WORKSPACE_ID = 'default';
 
-const CORE_PRODUCTS = [
-    { id: 'P12005', name: 'มะเขือเทศ' },
-    { id: 'P12001', name: 'กะหล่ำปลี' },
-];
+const CORE_PRODUCTS = [];
 
 const EXTRA_P13_PRODUCTS = Array.from({ length: 92 }, (_, i) => {
     const sequence = String(i + 1).padStart(3, '0');
@@ -24,7 +21,7 @@ const EXTRA_P13_PRODUCTS = Array.from({ length: 92 }, (_, i) => {
 
 function isAllowedProduct(product) {
     const id = String(product?.id || '');
-    return /^P12\d{3}$/i.test(id) || /^P13(00[1-9]|0[1-8][0-9]|09[0-2])$/i.test(id);
+    return /^P13(00[1-9]|0[1-8][0-9]|09[0-2])$/i.test(id);
 }
 
 async function getProductsToTrack() {
@@ -48,7 +45,7 @@ async function getProductsToTrack() {
         }
 
         if (unique.length > 0) {
-            console.log(`[Market Price Scheduler] Tracking ${unique.length} allowed products (P12xxx + P13001-P13092)`);
+            console.log(`[Market Price Scheduler] Tracking ${unique.length} vegetable products (P13001-P13092)`);
             return unique;
         }
     } catch (err) {

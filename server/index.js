@@ -25,7 +25,7 @@ function generateWorkspaceCode() {
 }
 
 function isAllowedMarketProductId(productId) {
-    return /^(P12\d{3}|P13(00[1-9]|0[1-8][0-9]|09[0-2]))$/i.test(String(productId || ''));
+    return /^P13(00[1-9]|0[1-8][0-9]|09[0-2])$/i.test(String(productId || ''));
 }
 
 async function generateUniqueWorkspaceCode() {
@@ -935,7 +935,7 @@ app.get('/api/price-history', async (req, res) => {
                                      AVG(max_price)::float8 AS max_price
             FROM market_prices
             WHERE workspace_id = $1
-                            AND product_id ~ '^(P12\\d{3}|P13(00[1-9]|0[1-8][0-9]|09[0-2]))$'
+                              AND product_id ~ '^P13(00[1-9]|0[1-8][0-9]|09[0-2])$'
               AND product_name IS NOT NULL AND product_name <> ''
             GROUP BY period, product_name
             ORDER BY period ASC
@@ -1209,7 +1209,7 @@ app.get('/api/market-prices', async (req, res) => {
             });
         }
         if (!isAllowedMarketProductId(product_id)) {
-            return res.status(400).json({ error: 'Only vegetable product IDs are allowed (P12xxx, P13001-P13092)' });
+            return res.status(400).json({ error: 'Only vegetable product IDs are allowed (P13001-P13092)' });
         }
         
         const priceData = await fetchMarketPrice(product_id, from_date, to_date);
@@ -1231,7 +1231,7 @@ app.get('/api/market-prices/today', async (req, res) => {
             return res.status(400).json({ error: 'Missing product_id parameter' });
         }
         if (!isAllowedMarketProductId(product_id)) {
-            return res.status(400).json({ error: 'Only vegetable product IDs are allowed (P12xxx, P13001-P13092)' });
+            return res.status(400).json({ error: 'Only vegetable product IDs are allowed (P13001-P13092)' });
         }
         
         const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -1289,7 +1289,7 @@ app.get('/api/market-prices/history/:product_id', async (req, res) => {
         const { from_date, to_date } = req.query;
 
         if (!isAllowedMarketProductId(product_id)) {
-            return res.status(400).json({ error: 'Only vegetable product IDs are allowed (P12xxx, P13001-P13092)' });
+            return res.status(400).json({ error: 'Only vegetable product IDs are allowed (P13001-P13092)' });
         }
         
         let sql = 'SELECT * FROM market_prices WHERE workspace_id = $1 AND product_id = $2';
@@ -1341,7 +1341,7 @@ app.get('/api/market-prices/latest', async (req, res) => {
                     created_at
                 FROM market_prices
                 WHERE workspace_id = $1
-                  AND product_id ~ '^(P12\\d{3}|P13(00[1-9]|0[1-8][0-9]|09[0-2]))$'
+                  AND product_id ~ '^P13(00[1-9]|0[1-8][0-9]|09[0-2])$'
                   AND product_name IS NOT NULL
                   AND btrim(product_name) <> ''
                 ORDER BY product_id, date DESC, created_at DESC
@@ -1380,7 +1380,7 @@ app.post('/api/market-prices/compare', async (req, res) => {
         const invalidId = product_ids.find((id) => !isAllowedMarketProductId(id));
         if (invalidId) {
             return res.status(400).json({
-                error: `Unsupported product_id: ${invalidId}. Only P12xxx and P13001-P13092 are allowed`
+                error: `Unsupported product_id: ${invalidId}. Only P13001-P13092 are allowed`
             });
         }
         
@@ -1448,7 +1448,7 @@ app.post('/api/market-prices/maintenance/repair', async (req, res) => {
                 DELETE FROM market_prices
                 WHERE workspace_id = $1
                   AND date BETWEEN $2 AND $3
-                  AND product_id !~ '^(P12\\d{3}|P13(00[1-9]|0[1-8][0-9]|09[0-2]))$'
+                AND product_id !~ '^P13(00[1-9]|0[1-8][0-9]|09[0-2])$'
             `;
             const deletedNonVegetable = await pool.query(deleteNonVegetableSql, [workspaceId, fromDate, toDate]);
             deletedNonVegetableRows = deletedNonVegetable.rowCount || 0;

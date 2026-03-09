@@ -134,7 +134,7 @@ export function PriceComparison() {
             </p>
           </div>
           <a
-            href="https://www.moc.go.th/th/content/category/index/id/311"
+            href="https://www.moc.go.th/th/content/category/detail/id/311/iid/3054"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm font-medium"
