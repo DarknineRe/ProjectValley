@@ -16,8 +16,15 @@ const CORE_PRODUCTS = [
     { id: 'P12001', name: 'กะหล่ำปลี' },
 ];
 
-function isVegetableProduct(product) {
-    return /^P12\d{3}$/i.test(String(product?.id || ''));
+const EXTRA_P13_PRODUCTS = Array.from({ length: 92 }, (_, i) => {
+    const sequence = String(i + 1).padStart(3, '0');
+    const id = `P13${sequence}`;
+    return { id, name: id };
+});
+
+function isAllowedProduct(product) {
+    const id = String(product?.id || '');
+    return /^P12\d{3}$/i.test(id) || /^P13(00[1-9]|0[1-8][0-9]|09[0-2])$/i.test(id);
 }
 
 async function getProductsToTrack() {
@@ -26,18 +33,22 @@ async function getProductsToTrack() {
 
     try {
         const catalogProducts = await fetchProductCatalog(safeLimit);
-        const combined = [...CORE_PRODUCTS, ...catalogProducts.filter(isVegetableProduct)];
+        const combined = [
+            ...CORE_PRODUCTS,
+            ...EXTRA_P13_PRODUCTS,
+            ...catalogProducts.filter(isAllowedProduct),
+        ];
         const unique = [];
         const seen = new Set();
 
         for (const product of combined) {
-            if (!product?.id || !isVegetableProduct(product) || seen.has(product.id)) continue;
+            if (!product?.id || !isAllowedProduct(product) || seen.has(product.id)) continue;
             seen.add(product.id);
             unique.push(product);
         }
 
         if (unique.length > 0) {
-            console.log(`[Market Price Scheduler] Tracking ${unique.length} vegetable products`);
+            console.log(`[Market Price Scheduler] Tracking ${unique.length} allowed products (P12xxx + P13001-P13092)`);
             return unique;
         }
     } catch (err) {
@@ -189,7 +200,7 @@ async function backfillPricesInRange(fromDate, toDate) {
  * Get available product IDs
  */
 function getAvailableProducts() {
-    return CORE_PRODUCTS.map(p => ({
+    return [...CORE_PRODUCTS, ...EXTRA_P13_PRODUCTS].map(p => ({
         id: p.id,
         name: p.name
     }));

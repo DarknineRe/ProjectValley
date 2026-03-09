@@ -326,19 +326,15 @@ export function PriceAnalysis() {
               <YAxis />
               <Tooltip />
               <Legend />
-              {availableCrops.map((crop, index) => {
-                const colors = ["#10b981", "#f59e0b", "#3b82f6", "#8b5cf6"];
-                return (
-                  <Line
-                    key={crop}
-                    type="monotone"
-                    dataKey={crop}
-                    stroke={colors[index % colors.length]}
-                    strokeWidth={crop === selectedCrop ? 3 : 2}
-                    opacity={crop === selectedCrop ? 1 : 0.3}
-                  />
-                );
-              })}
+              {selectedCrop && (
+                <Line
+                  key={selectedCrop}
+                  type="monotone"
+                  dataKey={selectedCrop}
+                  stroke="#10b981"
+                  strokeWidth={3}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </Card>

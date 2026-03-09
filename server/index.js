@@ -24,6 +24,10 @@ function generateWorkspaceCode() {
     return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
+function isAllowedMarketProductId(productId) {
+    return /^(P12\d{3}|P13(00[1-9]|0[1-8][0-9]|09[0-2]))$/i.test(String(productId || ''));
+}
+
 async function generateUniqueWorkspaceCode() {
     for (let i = 0; i < 10; i++) {
         const code = generateWorkspaceCode();
@@ -931,6 +935,7 @@ app.get('/api/price-history', async (req, res) => {
                                      AVG(max_price)::float8 AS max_price
             FROM market_prices
             WHERE workspace_id = $1
+                            AND product_id ~ '^(P12\\d{3}|P13(00[1-9]|0[1-8][0-9]|09[0-2]))$'
               AND product_name IS NOT NULL AND product_name <> ''
             GROUP BY period, product_name
             ORDER BY period ASC
@@ -1203,6 +1208,9 @@ app.get('/api/market-prices', async (req, res) => {
                 error: 'Missing required parameters: product_id, from_date, to_date' 
             });
         }
+        if (!isAllowedMarketProductId(product_id)) {
+            return res.status(400).json({ error: 'Only vegetable product IDs are allowed (P12xxx, P13001-P13092)' });
+        }
         
         const priceData = await fetchMarketPrice(product_id, from_date, to_date);
         res.json(priceData);
@@ -1221,6 +1229,9 @@ app.get('/api/market-prices/today', async (req, res) => {
         
         if (!product_id) {
             return res.status(400).json({ error: 'Missing product_id parameter' });
+        }
+        if (!isAllowedMarketProductId(product_id)) {
+            return res.status(400).json({ error: 'Only vegetable product IDs are allowed (P12xxx, P13001-P13092)' });
         }
         
         const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
@@ -1276,6 +1287,10 @@ app.get('/api/market-prices/history/:product_id', async (req, res) => {
         if (!workspaceId) return;
         const { product_id } = req.params;
         const { from_date, to_date } = req.query;
+
+        if (!isAllowedMarketProductId(product_id)) {
+            return res.status(400).json({ error: 'Only vegetable product IDs are allowed (P12xxx, P13001-P13092)' });
+        }
         
         let sql = 'SELECT * FROM market_prices WHERE workspace_id = $1 AND product_id = $2';
         const params = [workspaceId, product_id];
@@ -1312,6 +1327,12 @@ app.post('/api/market-prices/compare', async (req, res) => {
         
         if (!date || !product_ids || product_ids.length === 0) {
             return res.status(400).json({ error: 'Missing date or product_ids' });
+        }
+        const invalidId = product_ids.find((id) => !isAllowedMarketProductId(id));
+        if (invalidId) {
+            return res.status(400).json({
+                error: `Unsupported product_id: ${invalidId}. Only P12xxx and P13001-P13092 are allowed`
+            });
         }
         
         // build numbered placeholders starting at $3 ($1 workspace, $2 date)
@@ -1378,7 +1399,7 @@ app.post('/api/market-prices/maintenance/repair', async (req, res) => {
                 DELETE FROM market_prices
                 WHERE workspace_id = $1
                   AND date BETWEEN $2 AND $3
-                  AND product_id !~ '^P12\\d{3}$'
+                  AND product_id !~ '^(P12\\d{3}|P13(00[1-9]|0[1-8][0-9]|09[0-2]))$'
             `;
             const deletedNonVegetable = await pool.query(deleteNonVegetableSql, [workspaceId, fromDate, toDate]);
             deletedNonVegetableRows = deletedNonVegetable.rowCount || 0;

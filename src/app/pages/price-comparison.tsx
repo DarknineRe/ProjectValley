@@ -136,10 +136,13 @@ const mockMOCPrices: MOCPriceData[] = [
 
 export function PriceComparison() {
   const { products } = useData();
+  const vegetableMOCPrices = mockMOCPrices.filter(
+    (moc) => moc.category === "ผักสด" && moc.unit === "กิโลกรัม"
+  );
 
   // จับคู่สินค้าในสต็อกกับราคาอ้างอิง
   const matchedProducts = products.map((product) => {
-    const mocPrice = mockMOCPrices.find(
+    const mocPrice = vegetableMOCPrices.find(
       (moc) =>
         moc.productName.toLowerCase().includes(product.name.toLowerCase()) ||
         product.name.toLowerCase().includes(moc.productName.toLowerCase()) ||
@@ -385,7 +388,7 @@ export function PriceComparison() {
       {/* ตารางราคาอ้างอิงทั้งหมดจาก MOC */}
       <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          ราคาอ้างอิงทั้งหมดจากกระทรวงพาณิชย์
+          ราคาอ้างอิงผัก (กิโลกรัม) จากกระทรวงพาณิชย์
         </h3>
         <div className="overflow-x-auto">
           <Table>
@@ -401,7 +404,7 @@ export function PriceComparison() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockMOCPrices.map((moc, index) => (
+              {vegetableMOCPrices.map((moc, index) => (
                 <TableRow key={index}>
                   <TableCell className="font-medium">{moc.productName}</TableCell>
                   <TableCell>
