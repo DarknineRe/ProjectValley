@@ -254,6 +254,64 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         throw new Error("กรุณาเลือกพื้นที่ทำงานก่อน");
       }
       ensureCanAdd();
+
+      const existingProduct = products.find(
+        (p) =>
+          p.name.trim().toLowerCase() === product.name.trim().toLowerCase() &&
+          p.category.trim().toLowerCase() === product.category.trim().toLowerCase() &&
+          p.unit.trim().toLowerCase() === product.unit.trim().toLowerCase()
+      );
+
+      if (existingProduct) {
+        const mergedProduct: Product = {
+          ...existingProduct,
+          quantity: existingProduct.quantity + product.quantity,
+          minStock: Math.min(existingProduct.minStock, product.minStock),
+          harvestDate: product.harvestDate || existingProduct.harvestDate,
+          lastUpdated: new Date(),
+        };
+
+        const payload = {
+          ...mergedProduct,
+          workspaceId: currentWorkspace.id,
+          lastUpdated: new Date().toISOString(),
+        };
+        const workspaceQuery = `workspace_id=${encodeURIComponent(currentWorkspace.id)}`;
+        const updateRes = await fetch(`${API_BASE}/api/products/${existingProduct.id}?${workspaceQuery}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!updateRes.ok) {
+          throw new Error("Failed to merge existing product");
+        }
+
+        const data = await updateRes.json();
+        const normalized = normalizeProduct(data);
+        setProducts((prev) => prev.map((p) => (p.id === existingProduct.id ? normalized : p)));
+
+        toast.success("รวมสินค้าเดิมสำเร็จ", {
+          description: `รวม ${product.name} เข้ารายการเดิมแล้ว`,
+        });
+
+        await addActivityLog({
+          action: "update",
+          type: "product",
+          itemName: existingProduct.name,
+          user: "admin",
+          timestamp: new Date(),
+          details: JSON.stringify({
+            itemId: existingProduct.id,
+            previous: existingProduct,
+            new: normalized,
+            merged: true,
+          }),
+        });
+
+        return;
+      }
+
       const payload = {
         workspaceId: currentWorkspace.id,
         name: product.name,

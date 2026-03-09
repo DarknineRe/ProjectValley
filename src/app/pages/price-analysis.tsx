@@ -35,12 +35,17 @@ export function PriceAnalysis() {
 
   // Get available crops from price history
   const availableCrops = useMemo(() => {
-    if (priceHistory.length > 0) {
-      return Object.keys(priceHistory[0]).filter(
-        (key) => key !== "date" && !key.startsWith("__")
-      );
+    const cropSet = new Set<string>();
+
+    for (const row of priceHistory) {
+      for (const key of Object.keys(row)) {
+        if (key !== "date" && !key.startsWith("__")) {
+          cropSet.add(key);
+        }
+      }
     }
-    return [];
+
+    return Array.from(cropSet);
   }, [priceHistory]);
 
   // Set default crop when available crops change

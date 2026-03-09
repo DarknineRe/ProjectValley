@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import { Search, Edit, Trash2, AlertCircle, Plus, FolderOpen } from "lucide-react";
+import { Search, Edit, Trash2, AlertCircle, Plus, FolderOpen, Minus } from "lucide-react";
 import type { Product } from "../context/data-context";
 import { EditProductDialog } from "../components/edit-product-dialog";
 import { AddProductDialog } from "../components/add-product-dialog";
@@ -46,7 +46,11 @@ export function Inventory() {
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [bubbleActionProductId, setBubbleActionProductId] = useState<string | null>(null);
-  const [bubbleAmountByProduct, setBubbleAmountByProduct] = useState<Record<string, string>>({});
+  const [bubbleEditor, setBubbleEditor] = useState<{
+    productId: string;
+    action: "add" | "reduce";
+  } | null>(null);
+  const [bubbleAmountInput, setBubbleAmountInput] = useState("");
 
   // Get unique categories
   const categories = ["ทั้งหมด", ...new Set(products.map((p) => p.category))];
@@ -97,8 +101,21 @@ export function Inventory() {
     return { label: "มีสินค้า", variant: "default" as const };
   };
 
+  const selectedCategoryProducts =
+    workspaceMode === "category" && workspaceFilter !== "ทั้งหมด"
+      ? products.filter((product) => product.category === workspaceFilter)
+      : [];
+  const selectedCategoryNames = new Set(selectedCategoryProducts.map((p) => p.name));
+
   const productHistoryLogs = activityLogs
-    .filter((log) => log.type === "product")
+    .filter((log) => {
+      if (log.type !== "product") return false;
+      if (workspaceFilter === "ทั้งหมด") return true;
+      if (workspaceMode === "product") {
+        return log.itemName === workspaceFilter;
+      }
+      return selectedCategoryNames.has(log.itemName);
+    })
     .sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     )
@@ -109,6 +126,34 @@ export function Inventory() {
     if (action === "update") return "แก้ไข";
     if (action === "delete") return "ลบ";
     return action;
+  };
+
+  const getQuantityChangeText = (log: (typeof productHistoryLogs)[number]) => {
+    try {
+      const details = JSON.parse(log.details || "{}");
+      const prevQty = Number(details?.previous?.quantity);
+      const newQty = Number(details?.new?.quantity);
+      const unit = details?.new?.unit || details?.previous?.unit || "หน่วย";
+
+      if (Number.isFinite(prevQty) && Number.isFinite(newQty)) {
+        const diff = newQty - prevQty;
+        if (diff > 0) return `(+${diff.toLocaleString()} ${unit})`;
+        if (diff < 0) return `(-${Math.abs(diff).toLocaleString()} ${unit})`;
+        return `(0 ${unit})`;
+      }
+
+      if (log.action === "add" && Number.isFinite(newQty)) {
+        return `(+${newQty.toLocaleString()} ${unit})`;
+      }
+
+      if (log.action === "delete" && Number.isFinite(prevQty)) {
+        return `(-${prevQty.toLocaleString()} ${unit})`;
+      }
+    } catch {
+      // ignore parse errors and show fallback text
+    }
+
+    return "";
   };
 
   const canRollbackLog = (details: string) => {
@@ -138,7 +183,8 @@ export function Inventory() {
         ...product,
         quantity: nextQuantity,
       });
-      setBubbleAmountByProduct((prev) => ({ ...prev, [product.id]: "" }));
+      setBubbleEditor(null);
+      setBubbleAmountInput("");
     } finally {
       setBubbleActionProductId(null);
     }
@@ -170,7 +216,7 @@ export function Inventory() {
           เลือกตามหมวดหมู่หรือชื่อสินค้า แล้วกดบับเบิลเพื่อเปิดดูรายการ
         </p>
         <p className="text-xs text-gray-500 mb-3">
-          ใส่จำนวนที่ต้องการเพิ่มหรือลดในบับเบิลสินค้า ข้อมูลจะถูกบันทึกในประวัติและย้อนกลับได้
+          กดปุ่ม + หรือ - แล้วใส่ค่าในช่อง value จากนั้นกดยืนยัน ข้อมูลจะถูกบันทึกในประวัติและย้อนกลับได้
         </p>
 
         <div className="mb-4">
@@ -232,6 +278,7 @@ export function Inventory() {
                 const matchedProducts = products.filter((p) => p.name === workspace.name);
                 const product = matchedProducts.length === 1 ? matchedProducts[0] : null;
                 const isAll = workspace.name === "ทั้งหมด";
+                const unitLabel = product ? product.unit : "หน่วย";
 
                 return (
                   <button
@@ -249,26 +296,10 @@ export function Inventory() {
                   >
                     <p className="font-semibold leading-tight">{workspace.name}</p>
                     <p className="text-xs mt-1">
-                      {workspace.count.toLocaleString()} รายการ • {workspace.totalQuantity.toLocaleString()} หน่วย
+                      {workspace.count.toLocaleString()} รายการ • {workspace.totalQuantity.toLocaleString()} {unitLabel}
                     </p>
                     {!isAll && permissions.canEdit && product && (
                       <div className="mt-2 flex items-center gap-2">
-                        <Input
-                          type="number"
-                          min="1"
-                          inputMode="numeric"
-                          value={bubbleAmountByProduct[product.id] ?? ""}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            setBubbleAmountByProduct((prev) => ({
-                              ...prev,
-                              [product.id]: e.target.value,
-                            }));
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          placeholder="จำนวน"
-                          className="h-7 w-20 px-2 text-xs"
-                        />
                         <Button
                           type="button"
                           size="sm"
@@ -276,12 +307,12 @@ export function Inventory() {
                           disabled={bubbleActionProductId === product.id || product.quantity <= 0}
                           onClick={(e) => {
                             e.stopPropagation();
-                            const amount = Number(bubbleAmountByProduct[product.id] || 0);
-                            adjustQuantityFromBubble(product, amount, "reduce");
+                            setBubbleEditor({ productId: product.id, action: "reduce" });
+                            setBubbleAmountInput("");
                           }}
-                          className="h-7 px-2 text-xs"
+                          className="h-7 px-2"
                         >
-                          ลด
+                          <Minus className="h-3 w-3" />
                         </Button>
                         <Button
                           type="button"
@@ -290,12 +321,12 @@ export function Inventory() {
                           disabled={bubbleActionProductId === product.id}
                           onClick={(e) => {
                             e.stopPropagation();
-                            const amount = Number(bubbleAmountByProduct[product.id] || 0);
-                            adjustQuantityFromBubble(product, amount, "add");
+                            setBubbleEditor({ productId: product.id, action: "add" });
+                            setBubbleAmountInput("");
                           }}
-                          className="h-7 px-2 text-xs"
+                          className="h-7 px-2"
                         >
-                          เพิ่ม
+                          <Plus className="h-3 w-3" />
                         </Button>
                         <Button
                           type="button"
@@ -312,6 +343,44 @@ export function Inventory() {
                         </Button>
                       </div>
                     )}
+                    {!isAll && permissions.canEdit && product && bubbleEditor?.productId === product.id && (
+                      <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <Input
+                          type="number"
+                          min="1"
+                          inputMode="numeric"
+                          value={bubbleAmountInput}
+                          onChange={(e) => setBubbleAmountInput(e.target.value)}
+                          placeholder="value"
+                          className="h-7 w-24 px-2 text-xs"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          className="h-7 px-2 text-xs"
+                          disabled={bubbleActionProductId === product.id}
+                          onClick={() => {
+                            const amount = Number(bubbleAmountInput || 0);
+                            adjustQuantityFromBubble(product, amount, bubbleEditor.action);
+                          }}
+                        >
+                          ยืนยัน
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => {
+                            setBubbleEditor(null);
+                            setBubbleAmountInput("");
+                          }}
+                        >
+                          ยกเลิก
+                        </Button>
+                      </div>
+                    )}
                     {!isAll && permissions.canEdit && !product && workspace.count > 1 && (
                       <p className="text-[11px] mt-2 opacity-80">มีหลายรายการชื่อเดียวกัน</p>
                     )}
@@ -325,7 +394,7 @@ export function Inventory() {
 
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">ประวัติสินค้า (Rollback)</h3>
+          <h3 className="text-lg font-semibold text-gray-900">ประวัติสินค้า (ย้อนกลับ)</h3>
           <p className="text-xs text-gray-500">อัปเดต/ลบ/เพิ่มล่าสุด</p>
         </div>
 
@@ -342,7 +411,7 @@ export function Inventory() {
                 >
                   <div>
                     <p className="text-sm font-medium text-gray-900">
-                      {getActionLabel(log.action)}สินค้า {log.itemName}
+                      {getActionLabel(log.action)}สินค้า {log.itemName} {getQuantityChangeText(log)}
                     </p>
                     <p className="text-xs text-gray-500">
                       {new Date(log.timestamp).toLocaleString("th-TH")}
@@ -355,7 +424,7 @@ export function Inventory() {
                     disabled={!enabled}
                     onClick={() => enabled && rollbackActivity(log)}
                   >
-                    Rollback
+                    ย้อนกลับ
                   </Button>
                 </div>
               );
