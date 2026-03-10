@@ -18,12 +18,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-import { Calendar } from "./ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
-import { th } from "date-fns/locale";
 import type { PlantingSchedule } from "../context/data-context";
+
+function formatDateForInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseInputDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
 
 interface EditScheduleDialogProps {
   schedule: PlantingSchedule;
@@ -141,55 +148,35 @@ export function EditScheduleDialog({
             </div>
 
             <div className="space-y-2">
-              <Label>วันที่ปลูก *</Label>
-              <Popover modal={true}>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(formData.plantingDate, "PPP", { locale: th })}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 z-[120]" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={formData.plantingDate}
-                    onSelect={(date) =>
-                      date && setFormData({ ...formData, plantingDate: date })
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <Label htmlFor="edit-plantingDate">วันที่ปลูก *</Label>
+              <Input
+                id="edit-plantingDate"
+                type="date"
+                required
+                value={formatDateForInput(formData.plantingDate)}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    plantingDate: parseInputDate(e.target.value),
+                  })
+                }
+              />
             </div>
 
             <div className="space-y-2">
-              <Label>วันที่เก็บเกี่ยว *</Label>
-              <Popover modal={true}>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(formData.harvestDate, "PPP", { locale: th })}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 z-[120]" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={formData.harvestDate}
-                    onSelect={(date) =>
-                      date && setFormData({ ...formData, harvestDate: date })
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <Label htmlFor="edit-harvestDate">วันที่เก็บเกี่ยว *</Label>
+              <Input
+                id="edit-harvestDate"
+                type="date"
+                required
+                value={formatDateForInput(formData.harvestDate)}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    harvestDate: parseInputDate(e.target.value),
+                  })
+                }
+              />
             </div>
 
             <div className="space-y-2">
