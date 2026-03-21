@@ -47,12 +47,21 @@ export function Hub() {
   const [workspaceToDelete, setWorkspaceToDelete] = useState<Workspace | null>(null);
   const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
 
-  // Redirect if not authenticated
+  // Redirect if not authenticated or not admin
   useEffect(() => {
     if (!user) {
       navigate("/login");
+      return;
     }
-  }, [user, navigate]);
+    
+    // Check if user is admin (owner of at least one workspace)
+    const isAdmin = workspaces.some((ws) => ws.ownerId === user.id);
+    
+    // If not admin, redirect to marketplace
+    if (workspaces.length > 0 && !isAdmin) {
+      navigate("/marketplace");
+    }
+  }, [user, navigate, workspaces]);
 
   if (!user) {
     return null;

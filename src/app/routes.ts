@@ -1,9 +1,6 @@
 import { createBrowserRouter, redirect } from "react-router";
 import { Layout } from "./components/layout";
-import { ProtectedLayout } from "./components/protected-layout";
-import { HubProtectedLayout } from "./components/hub-protected-layout";
 import { Marketplace } from "./pages/marketplace";
-import { HomeRouter } from "./pages/home-router";
 import { Inventory } from "./pages/inventory";
 import { InventorySummary } from "./pages/inventory-summary";
 import { PlantingCalendar } from "./pages/planting-calendar";
@@ -13,6 +10,8 @@ import { Login } from "./pages/login";
 import { Register } from "./pages/register";
 import { Hub } from "./pages/hub";
 import { Profile } from "./pages/profile";
+import { PriceSearch } from "./pages/price-search";
+import { BuyerShop } from "./pages/buyer";
 
 export const router = createBrowserRouter([
   {
@@ -32,10 +31,17 @@ export const router = createBrowserRouter([
     Component: Profile,
   },
   {
+    path: "/price-search",
+    Component: PriceSearch,
+  },
+  {
+    path: "/buyer",
+    Component: BuyerShop,
+  },
+  {
     path: "/",
     Component: Layout,
     children: [
-      { index: true, Component: HomeRouter },
       { path: "marketplace", Component: Marketplace },
       { path: "inventory", Component: Inventory },
       { path: "summary", Component: InventorySummary },

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router";
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from "../context/auth-context";
+import { useWorkspace } from "../context/workspace-context";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -14,7 +15,29 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { login, loginWithGoogle } = useAuth();
+  const { workspaces, currentWorkspace } = useWorkspace();
   const navigate = useNavigate();
+
+  // Effect to route user after workspaces are loaded
+  useEffect(() => {
+    if (isLoading || !workspaces.length) return;
+
+    // Determine user role based on workspaces
+    const hasOwnerRole = workspaces.some((ws) => ws.ownerId === localStorage.getItem("currentUserId"));
+    const hasEmployeeRole = workspaces.length > 0;
+
+    // Route based on role
+    if (hasOwnerRole) {
+      // Admin (owner) -> Hub
+      navigate("/hub");
+    } else if (hasEmployeeRole && currentWorkspace) {
+      // Seller (employee) -> Marketplace (workspace view)
+      navigate("/marketplace");
+    } else {
+      // Fallback to hub
+      navigate("/hub");
+    }
+  }, [workspaces, currentWorkspace, navigate, isLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,12 +50,14 @@ export function Login() {
     setIsLoading(true);
     try {
       await login(email, password);
+      // Store user ID for role detection
+      const userData = JSON.parse(localStorage.getItem("currentUser") || "{}");
+      localStorage.setItem("currentUserId", userData.id);
       toast.success("เข้าสู่ระบบสำเร็จ!");
-      navigate("/hub");
+      // Routing will be handled by useEffect above
     } catch (error: any) {
-      toast.error(error.message || "เข้าสู่ระบบไม่สำเร็จ");
-    } finally {
       setIsLoading(false);
+      toast.error(error.message || "เข้าสู่ระบบไม่สำเร็จ");
     }
   };
 
@@ -41,12 +66,14 @@ export function Login() {
       try {
         setIsLoading(true);
         await loginWithGoogle(response.access_token);
+        // Store user ID for role detection
+        const userData = JSON.parse(localStorage.getItem("currentUser") || "{}");
+        localStorage.setItem("currentUserId", userData.id);
         toast.success("เข้าสู่ระบบด้วย Google สำเร็จ!");
-        navigate("/hub");
+        // Routing will be handled by useEffect above
       } catch (error: any) {
-        toast.error(error.message || "เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
-      } finally {
         setIsLoading(false);
+        toast.error(error.message || "เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
       }
     },
     onError: () => {
@@ -62,14 +89,17 @@ export function Login() {
             <Leaf className="h-8 w-8 text-green-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            ระบบจัดการสต็อกเกษตร
+            ระบบผู้ขาย
           </h1>
-          <p className="text-gray-600">
-            เข้าสู่ระบบเพื่อจัดการผลผลิตทางการเกษตร
+          <p className="text-gray-600 text-sm mb-4">
+            เข้าสู่ระบบสำหรับผู้ขาย (ผู้ค้า)
           </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm text-blue-700">
+            💡 หากคุณเป็นผู้ซื้อ กรุณาเยี่ยมชม <Link to="/buyer" className="font-bold hover:underline">ตลาดกลาง</Link> แทน
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 mt-6">
           <div className="space-y-2">
             <Label htmlFor="email">อีเมล</Label>
             <div className="relative">
