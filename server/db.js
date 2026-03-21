@@ -244,6 +244,7 @@ async function initializeDatabase() {
                 quantity INT NOT NULL,
                 unit VARCHAR(50) NOT NULL,
                 price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+                image_url TEXT,
                 seller_id VARCHAR(255) NOT NULL DEFAULT 'legacy',
                 seller_name VARCHAR(255) NOT NULL DEFAULT 'ไม่ระบุผู้ขาย',
                 minStock INT NOT NULL DEFAULT 0,
@@ -257,6 +258,9 @@ async function initializeDatabase() {
         `);
         await client.query(`
             ALTER TABLE products ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(255);
+        `);
+        await client.query(`
+            ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
         `);
         await client.query(`
             ALTER TABLE products ADD COLUMN IF NOT EXISTS price NUMERIC(10, 2);

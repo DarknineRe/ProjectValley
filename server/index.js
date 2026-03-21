@@ -913,6 +913,23 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
+app.get('/api/public/products', async (req, res) => {
+    try {
+        const { rows } = await pool.query(`
+            SELECT
+                p.*,
+                w.name AS workspace_name
+            FROM products p
+            LEFT JOIN workspaces w ON w.id = p.workspace_id
+            WHERE p.quantity > 0
+            ORDER BY COALESCE(w.name, 'ทั่วไป') ASC, p.lastUpdated DESC
+        `);
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/products', async (req, res) => {
     try {
         const workspaceId = requireWorkspaceId(req, res);
@@ -923,6 +940,7 @@ app.post('/api/products', async (req, res) => {
             quantity,
             unit,
             price,
+            imageUrl,
             sellerId,
             sellerName,
             minStock,
@@ -941,8 +959,8 @@ app.post('/api/products', async (req, res) => {
         }
         const id = Date.now().toString();
         const insertSql = `
-            INSERT INTO products (id, workspace_id, name, category, quantity, unit, price, seller_id, seller_name, minStock, harvestDate, lastUpdated)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            INSERT INTO products (id, workspace_id, name, category, quantity, unit, price, image_url, seller_id, seller_name, minStock, harvestDate, lastUpdated)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING *
         `;
 
@@ -954,6 +972,7 @@ app.post('/api/products', async (req, res) => {
             quantity,
             unit,
             Number(price),
+            imageUrl || null,
             String(sellerId),
             String(sellerName),
             minStock,
@@ -976,6 +995,7 @@ app.put('/api/products/:id', async (req, res) => {
             quantity,
             unit,
             price,
+            imageUrl,
             sellerId,
             sellerName,
             minStock,
@@ -993,8 +1013,8 @@ app.put('/api/products/:id', async (req, res) => {
         }
         const sql = `
             UPDATE products
-            SET name=$1, category=$2, quantity=$3, unit=$4, price=$5, seller_id=$6, seller_name=$7, minStock=$8, harvestDate=$9, lastUpdated=$10
-            WHERE id=$11 AND workspace_id=$12
+            SET name=$1, category=$2, quantity=$3, unit=$4, price=$5, image_url=$6, seller_id=$7, seller_name=$8, minStock=$9, harvestDate=$10, lastUpdated=$11
+            WHERE id=$12 AND workspace_id=$13
             RETURNING *
         `;
 
@@ -1004,6 +1024,7 @@ app.put('/api/products/:id', async (req, res) => {
             quantity,
             unit,
             Number(price),
+            imageUrl || null,
             String(sellerId),
             String(sellerName),
             minStock,

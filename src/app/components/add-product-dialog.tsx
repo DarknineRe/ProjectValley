@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import { useData } from "../context/data-context";
 import { useWorkspace } from "../context/workspace-context";
 import { API_BASE } from "../../api";
@@ -45,6 +46,7 @@ export function AddProductDialog({
 }: AddProductDialogProps) {
   const { addProduct, products } = useData();
   const { currentWorkspace } = useWorkspace();
+  const navigate = useNavigate();
   const [marketTemplates, setMarketTemplates] = useState<
     Array<{ name: string; category: string; unit: string; source: "market" | "inventory" }>
   >([]);
@@ -56,6 +58,7 @@ export function AddProductDialog({
     minStock: "",
     unit: "",
     harvestDate: "",
+    imageUrl: "",
   });
 
   useEffect(() => {
@@ -197,6 +200,7 @@ export function AddProductDialog({
         price: Number(formData.price),
         minStock: Number(formData.minStock || 0),
         harvestDate: formData.harvestDate || undefined,
+        imageUrl: formData.imageUrl.trim() || undefined,
       });
 
       // Reset form
@@ -208,8 +212,10 @@ export function AddProductDialog({
         minStock: "",
         unit: "",
         harvestDate: "",
+        imageUrl: "",
       });
       onOpenChange(false);
+      navigate("/workspace/marketplace");
     } catch (error) {
       console.error("Error adding product:", error);
     }
@@ -352,6 +358,19 @@ export function AddProductDialog({
                 onChange={(e) =>
                   setFormData({ ...formData, harvestDate: e.target.value })
                 }
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="imageUrl">ลิงก์รูปสินค้า</Label>
+              <Input
+                id="imageUrl"
+                type="url"
+                value={formData.imageUrl}
+                onChange={(e) =>
+                  setFormData({ ...formData, imageUrl: e.target.value })
+                }
+                placeholder="https://example.com/product.jpg"
               />
             </div>
           </div>

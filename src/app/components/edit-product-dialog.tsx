@@ -51,6 +51,7 @@ export function EditProductDialog({
     price: product.price.toString(),
     minStock: (product.minStock ?? 0).toString(),
     unit: product.unit,
+    imageUrl: product.imageUrl || "",
     harvestDate: product.harvestDate
       ? new Date(product.harvestDate).toISOString().split("T")[0]
       : "",
@@ -64,6 +65,7 @@ export function EditProductDialog({
       price: product.price.toString(),
       minStock: (product.minStock ?? 0).toString(),
       unit: product.unit,
+      imageUrl: product.imageUrl || "",
       harvestDate: product.harvestDate
         ? new Date(product.harvestDate).toISOString().split("T")[0]
         : "",
@@ -81,6 +83,7 @@ export function EditProductDialog({
       unit: formData.unit,
       price: Number(formData.price),
       minStock: Number(formData.minStock || 0),
+      imageUrl: formData.imageUrl.trim() || undefined,
       harvestDate: formData.harvestDate ? new Date(formData.harvestDate) : undefined,
     });
 
@@ -207,6 +210,19 @@ export function EditProductDialog({
                 onChange={(e) =>
                   setFormData({ ...formData, harvestDate: e.target.value })
                 }
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="edit-imageUrl">ลิงก์รูปสินค้า</Label>
+              <Input
+                id="edit-imageUrl"
+                type="url"
+                value={formData.imageUrl}
+                onChange={(e) =>
+                  setFormData({ ...formData, imageUrl: e.target.value })
+                }
+                placeholder="https://example.com/product.jpg"
               />
             </div>
 

@@ -237,7 +237,7 @@ export function Inventory() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">คลังสินค้าของผู้ค้า</h2>
-          <p className="text-gray-600 mt-1">ผู้ค้าสามารถเพิ่มสินค้าและตั้งราคาได้ ส่วนผู้ซื้อใช้หน้านี้ดูรายการเชิงรายละเอียด</p>
+          <p className="text-gray-600 mt-1">เมื่อเพิ่มสินค้าใหม่ ระบบจะพาไปที่ตลาดกลางเพื่อให้เห็นรายการขายทันที</p>
         </div>
         <Button
           onClick={() => setIsAddDialogOpen(true)}
@@ -493,7 +493,7 @@ export function Inventory() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ชื่อสินค้า</TableHead>
+                <TableHead>สินค้า</TableHead>
                 <TableHead>หมวดหมู่</TableHead>
                 <TableHead>ผู้ขาย</TableHead>
                 <TableHead className="text-right">ราคา</TableHead>
@@ -521,7 +521,20 @@ export function Inventory() {
                   return (
                     <TableRow key={product.id}>
                       <TableCell className="font-medium">
-                        {product.name}
+                        <div className="flex items-center gap-3">
+                          {product.imageUrl ? (
+                            <img
+                              src={product.imageUrl}
+                              alt={product.name}
+                              className="h-12 w-12 rounded-xl object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                              <FolderOpen className="h-5 w-5" />
+                            </div>
+                          )}
+                          <span>{product.name}</span>
+                        </div>
                       </TableCell>
                       <TableCell>{product.category}</TableCell>
                       <TableCell>

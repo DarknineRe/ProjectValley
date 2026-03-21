@@ -6,6 +6,7 @@ import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Search, Store, Package2, Users, Layers3, Filter } from "lucide-react";
+import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 
 function normalizeMarketplaceName(name: string) {
   return String(name || "")
@@ -219,7 +220,21 @@ export function Marketplace() {
                           className="rounded-2xl border border-gray-200 bg-white px-4 py-3"
                         >
                           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                            <div>
+                            <div className="flex items-center gap-4">
+                              <div className="h-20 w-20 overflow-hidden rounded-2xl bg-emerald-50">
+                                {offer.imageUrl ? (
+                                  <ImageWithFallback
+                                    src={offer.imageUrl}
+                                    alt={offer.name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-emerald-600">
+                                    <Package2 className="h-8 w-8 opacity-60" />
+                                  </div>
+                                )}
+                              </div>
+                              <div>
                               <div className="flex items-center gap-2">
                                 <p className="font-medium text-gray-900">{offer.sellerName}</p>
                                 {offer.sellerId === user?.id && (
@@ -230,6 +245,7 @@ export function Marketplace() {
                                 คงเหลือ {offer.quantity.toLocaleString()} {offer.unit}
                                 {offer.minStock > 0 ? ` • แจ้งเตือนเมื่อเหลือ ${offer.minStock.toLocaleString()} ${offer.unit}` : ""}
                               </p>
+                              </div>
                             </div>
                             <div className="text-right">
                               <p className="text-lg font-semibold text-gray-900">฿{offer.price.toFixed(2)}</p>

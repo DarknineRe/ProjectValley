@@ -57,9 +57,9 @@ export function Hub() {
     // Check if user is admin (owner of at least one workspace)
     const isAdmin = workspaces.some((ws) => ws.ownerId === user.id);
     
-    // If not admin, redirect to marketplace
+    // If not admin, redirect to workspace marketplace
     if (workspaces.length > 0 && !isAdmin) {
-      navigate("/marketplace");
+      navigate("/workspace/marketplace");
     }
   }, [user, navigate, workspaces]);
 
@@ -77,7 +77,7 @@ export function Hub() {
       setIsCreateDialogOpen(false);
       setNewWorkspaceName("");
       toast.success("สร้าง Workspace สำเร็จ!");
-      navigate("/");
+      navigate("/workspace/marketplace");
     } catch (error) {
       toast.error("ไม่สามารถสร้าง Workspace ได้");
     }
@@ -93,7 +93,7 @@ export function Hub() {
       setIsJoinDialogOpen(false);
       setJoinCode("");
       toast.success("เข้าร่วม Workspace สำเร็จ!");
-      navigate("/");
+      navigate("/workspace/marketplace");
     } else {
       toast.error("ไม่พบ Workspace ที่ใช้รหัสนี้");
     }
@@ -101,7 +101,7 @@ export function Hub() {
 
   const handleSelectWorkspace = (workspace: Workspace) => {
     setCurrentWorkspace(workspace);
-    navigate("/");
+    navigate("/workspace/marketplace");
   };
 
   const handleDeleteWorkspace = async () => {

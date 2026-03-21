@@ -1,43 +1,28 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from "../context/auth-context";
-import { useWorkspace } from "../context/workspace-context";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Leaf, Lock, Mail } from "lucide-react";
+import { Leaf, Lock, Mail, ShoppingBag, Store } from "lucide-react";
 import { toast } from "sonner";
 
 export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedMode, setSelectedMode] = useState<"buyer" | "seller">("seller");
   const { login, loginWithGoogle } = useAuth();
-  const { workspaces, currentWorkspace } = useWorkspace();
   const navigate = useNavigate();
 
-  // Effect to route user after workspaces are loaded
   useEffect(() => {
-    if (isLoading || !workspaces.length) return;
-
-    // Determine user role based on workspaces
-    const hasOwnerRole = workspaces.some((ws) => ws.ownerId === localStorage.getItem("currentUserId"));
-    const hasEmployeeRole = workspaces.length > 0;
-
-    // Route based on role
-    if (hasOwnerRole) {
-      // Admin (owner) -> Hub
-      navigate("/hub");
-    } else if (hasEmployeeRole && currentWorkspace) {
-      // Seller (employee) -> Marketplace (workspace view)
-      navigate("/marketplace");
-    } else {
-      // Fallback to hub
+    const savedUser = localStorage.getItem("currentUser");
+    if (savedUser) {
       navigate("/hub");
     }
-  }, [workspaces, currentWorkspace, navigate, isLoading]);
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,14 +35,12 @@ export function Login() {
     setIsLoading(true);
     try {
       await login(email, password);
-      // Store user ID for role detection
-      const userData = JSON.parse(localStorage.getItem("currentUser") || "{}");
-      localStorage.setItem("currentUserId", userData.id);
       toast.success("เข้าสู่ระบบสำเร็จ!");
-      // Routing will be handled by useEffect above
+      navigate("/hub");
     } catch (error: any) {
-      setIsLoading(false);
       toast.error(error.message || "เข้าสู่ระบบไม่สำเร็จ");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -66,14 +49,12 @@ export function Login() {
       try {
         setIsLoading(true);
         await loginWithGoogle(response.access_token);
-        // Store user ID for role detection
-        const userData = JSON.parse(localStorage.getItem("currentUser") || "{}");
-        localStorage.setItem("currentUserId", userData.id);
         toast.success("เข้าสู่ระบบด้วย Google สำเร็จ!");
-        // Routing will be handled by useEffect above
+        navigate("/hub");
       } catch (error: any) {
-        setIsLoading(false);
         toast.error(error.message || "เข้าสู่ระบบด้วย Google ไม่สำเร็จ");
+      } finally {
+        setIsLoading(false);
       }
     },
     onError: () => {
@@ -89,16 +70,55 @@ export function Login() {
             <Leaf className="h-8 w-8 text-green-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            ระบบผู้ขาย
+            เลือกการใช้งาน
           </h1>
           <p className="text-gray-600 text-sm mb-4">
-            เข้าสู่ระบบสำหรับผู้ขาย (ผู้ค้า)
+            ผู้ซื้อเข้าดูสินค้าหน้าหลักได้ทันที ส่วนผู้ขายเข้าสู่ระบบเพื่อจัดการร้าน
           </p>
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm text-blue-700">
-            💡 หากคุณเป็นผู้ซื้อ กรุณาเยี่ยมชม <Link to="/buyer" className="font-bold hover:underline">ตลาดกลาง</Link> แทน
+          <div className="grid grid-cols-2 gap-3 text-left">
+            <button
+              type="button"
+              className={`rounded-xl border p-4 transition-colors ${
+                selectedMode === "buyer"
+                  ? "border-emerald-600 bg-emerald-50"
+                  : "border-gray-200 bg-white"
+              }`}
+              onClick={() => setSelectedMode("buyer")}
+            >
+              <ShoppingBag className="mb-2 h-5 w-5 text-emerald-700" />
+              <p className="font-semibold text-gray-900">ผู้ซื้อ</p>
+              <p className="text-xs text-gray-600">ดูสินค้าและราคาที่หน้าแรก</p>
+            </button>
+            <button
+              type="button"
+              className={`rounded-xl border p-4 transition-colors ${
+                selectedMode === "seller"
+                  ? "border-emerald-600 bg-emerald-50"
+                  : "border-gray-200 bg-white"
+              }`}
+              onClick={() => setSelectedMode("seller")}
+            >
+              <Store className="mb-2 h-5 w-5 text-emerald-700" />
+              <p className="font-semibold text-gray-900">ผู้ขาย</p>
+              <p className="text-xs text-gray-600">จัดการสินค้าและลงขายในตลาด</p>
+            </button>
           </div>
         </div>
 
+        {selectedMode === "buyer" ? (
+          <div className="space-y-4 mt-6">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+              หน้าหลักของเว็บคือหน้าผู้ซื้อแล้ว คุณสามารถเข้าไปเลือกซื้อสินค้า ดูรูปสินค้า และเช็กราคาได้ทันที
+            </div>
+            <Button
+              type="button"
+              className="w-full bg-emerald-600 hover:bg-emerald-700"
+              onClick={() => navigate("/")}
+            >
+              ไปหน้าผู้ซื้อ
+            </Button>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4 mt-6">
           <div className="space-y-2">
             <Label htmlFor="email">อีเมล</Label>
@@ -140,7 +160,10 @@ export function Login() {
             {isLoading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
           </Button>
         </form>
+        )}
 
+        {selectedMode === "seller" && (
+        <>
         <div className="mt-6 relative">
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-gray-300"></div>
@@ -189,6 +212,8 @@ export function Login() {
             </Link>
           </p>
         </div>
+        </>
+        )}
 
 
       </Card>

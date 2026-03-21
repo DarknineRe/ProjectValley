@@ -18,14 +18,12 @@ import {
 type RoleMode = "admin" | "merchant" | "buyer";
 
 const navItems = [
-  { path: "/", label: "ภาพรวม", icon: BarChart3, permissionKey: "viewDashboard" as const, audience: ["admin", "merchant"] as RoleMode[] },
-  { path: "/", label: "ซื้อสินค้า", icon: ShoppingCart, permissionKey: "viewInventory" as const, audience: ["buyer"] as RoleMode[] },
-  { path: "/marketplace", label: "ตลาดกลาง", icon: Store, permissionKey: "viewInventory" as const, audience: ["admin", "merchant"] as RoleMode[] },
-  { path: "/inventory", label: "จัดการสต็อก", icon: Package, permissionKey: "viewInventory" as const, audience: ["admin", "merchant"] as RoleMode[] },
-  { path: "/summary", label: "สรุปสต็อก", icon: BarChart2, permissionKey: "viewSummary" as const, audience: ["admin", "merchant"] as RoleMode[] },
-  { path: "/calendar", label: "ปฏิทินการปลูก", icon: Calendar, permissionKey: "viewCalendar" as const, audience: ["admin", "merchant"] as RoleMode[] },
-  { path: "/members", label: "สมาชิก", icon: Users, permissionKey: "viewMembers" as const, audience: ["admin"] as RoleMode[] },
-  { path: "/activity", label: "ประวัติการเปลี่ยนแปลง", icon: ClipboardList, permissionKey: "viewActivity" as const, audience: ["admin", "merchant"] as RoleMode[] },
+  { path: "/workspace/marketplace", label: "ตลาดกลาง", icon: Store, permissionKey: "viewInventory" as const, audience: ["admin", "merchant"] as RoleMode[] },
+  { path: "/workspace/inventory", label: "จัดการสต็อก", icon: Package, permissionKey: "viewInventory" as const, audience: ["admin", "merchant"] as RoleMode[] },
+  { path: "/workspace/summary", label: "สรุปสต็อก", icon: BarChart2, permissionKey: "viewSummary" as const, audience: ["admin", "merchant"] as RoleMode[] },
+  { path: "/workspace/calendar", label: "ปฏิทินการปลูก", icon: Calendar, permissionKey: "viewCalendar" as const, audience: ["admin", "merchant"] as RoleMode[] },
+  { path: "/workspace/members", label: "สมาชิก", icon: Users, permissionKey: "viewMembers" as const, audience: ["admin"] as RoleMode[] },
+  { path: "/workspace/activity", label: "ประวัติการเปลี่ยนแปลง", icon: ClipboardList, permissionKey: "viewActivity" as const, audience: ["admin", "merchant"] as RoleMode[] },
 ];
 
 export function Layout() {
@@ -78,7 +76,7 @@ export function Layout() {
 
   const handleLogout = () => {
     logout();
-    navigate("/login");
+    navigate("/");
   };
 
   const handleChangeWorkspace = () => {

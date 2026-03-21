@@ -11,6 +11,7 @@ export interface Product {
   quantity: number;
   unit: string;
   price: number;
+  imageUrl?: string;
   sellerId: string;
   sellerName: string;
   minStock: number;
@@ -129,6 +130,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     quantity: row.quantity,
     unit: row.unit,
     price: Number(row.price ?? 0),
+    imageUrl: row.image_url ?? row.imageUrl ?? undefined,
     sellerId: row.seller_id ?? row.sellerId ?? row.sellerid ?? "legacy",
     sellerName: row.seller_name ?? row.sellerName ?? row.sellername ?? "ไม่ระบุผู้ขาย",
     minStock: row.minstock ?? row.minStock ?? 0,
@@ -287,6 +289,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           ...existingProduct,
           quantity: existingProduct.quantity + product.quantity,
           price: product.price,
+          imageUrl: product.imageUrl || existingProduct.imageUrl,
           sellerId: user.id,
           sellerName: user.name,
           minStock: product.minStock,
@@ -342,6 +345,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         quantity: product.quantity,
         unit: product.unit,
         price: product.price,
+        imageUrl: product.imageUrl || "",
         sellerId: user.id,
         sellerName: user.name,
         minStock: product.minStock,

@@ -15,6 +15,10 @@ import { BuyerShop } from "./pages/buyer";
 
 export const router = createBrowserRouter([
   {
+    path: "/",
+    Component: BuyerShop,
+  },
+  {
     path: "/login",
     Component: Login,
   },
@@ -39,9 +43,10 @@ export const router = createBrowserRouter([
     Component: BuyerShop,
   },
   {
-    path: "/",
+    path: "/workspace",
     Component: Layout,
     children: [
+      { index: true, loader: () => redirect("/workspace/marketplace") },
       { path: "marketplace", Component: Marketplace },
       { path: "inventory", Component: Inventory },
       { path: "summary", Component: InventorySummary },
