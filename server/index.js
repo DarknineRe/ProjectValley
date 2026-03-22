@@ -1199,6 +1199,30 @@ app.post('/api/auth/google', async (req, res) => {
         let user;
         if (existingUsers.length > 0) {
             user = existingUsers[0];
+
+            // Backfill workspace for legacy accounts that existed before auto-workspace logic.
+            if (user.role !== 'admin') {
+                const client = await pool.connect();
+                try {
+                    await client.query('BEGIN');
+                    const { rows: membershipRows } = await client.query(
+                        'SELECT COUNT(*)::int AS count FROM workspace_members WHERE user_id = $1',
+                        [String(user.id)]
+                    );
+                    const membershipCount = membershipRows[0]?.count || 0;
+
+                    if (membershipCount === 0) {
+                        await createOwnedWorkspaceForUser(client, user.id, user.name || email.split('@')[0]);
+                    }
+
+                    await client.query('COMMIT');
+                } catch (txErr) {
+                    await client.query('ROLLBACK');
+                    throw txErr;
+                } finally {
+                    client.release();
+                }
+            }
         } else {
             // Create new user from Google auth
             const client = await pool.connect();
