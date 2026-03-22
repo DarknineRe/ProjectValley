@@ -35,7 +35,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/price-search",
-    Component: PriceSearch,
+    loader: () => redirect("/workspace/price-search"),
   },
   {
     path: "/workspace",
@@ -45,6 +45,7 @@ export const router = createBrowserRouter([
       { path: "marketplace", Component: Marketplace },
       { path: "inventory", Component: Inventory },
       { path: "summary", Component: InventorySummary },
+      { path: "price-search", Component: PriceSearch },
       { path: "calendar", Component: PlantingCalendar },
       { path: "members", Component: Members },
       { path: "activity", Component: ActivityLog },

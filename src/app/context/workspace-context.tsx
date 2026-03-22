@@ -50,12 +50,16 @@ export interface WorkspacePermissions {
 
 interface WorkspaceContextType {
   workspaces: Workspace[];
+  isLoading: boolean;
   currentWorkspace: Workspace | null;
   setCurrentWorkspace: (workspace: Workspace | null) => void;
   createWorkspace: (name: string) => Promise<void>;
   joinWorkspace: (code: string) => Promise<boolean>;
   deleteWorkspace: (workspaceId: string) => Promise<boolean>;
-  inviteToWorkspace: (workspaceId: string, email: string) => void;
+  inviteToWorkspace: (
+    workspaceId: string,
+    payload: { creatorUserId: string; name: string; email: string; password: string }
+  ) => Promise<boolean>;
   getUserRole: () => "owner" | "employee" | null;
   getUserPermissions: () => WorkspacePermissions;
   updateMemberPermissions: (
@@ -70,6 +74,7 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [currentWorkspace, setCurrentWorkspaceState] = useState<Workspace | null>(null);
 
   const getCurrentWorkspaceKey = (userId: string) => `currentWorkspace:${userId}`;
@@ -151,6 +156,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (!user?.id) {
       setWorkspaces([]);
       setCurrentWorkspaceState(null);
+      setIsLoading(false);
       return;
     }
 
@@ -158,6 +164,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
     const load = async () => {
       try {
+        setIsLoading(true);
         const fetchedWorkspaces = await fetchWorkspaces(user.id);
         if (isCancelled) return;
 
@@ -182,6 +189,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         if (!isCancelled) {
           setWorkspaces([]);
           setCurrentWorkspaceState(null);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
         }
       }
     };
@@ -291,9 +302,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
-  const inviteToWorkspace = (workspaceId: string, email: string) => {
-    // Mock invite - in real app, this would send an email
-    console.log(`Invited ${email} to workspace ${workspaceId}`);
+  const inviteToWorkspace = async (
+    workspaceId: string,
+    payload: { creatorUserId: string; name: string; email: string; password: string }
+  ): Promise<boolean> => {
+    const res = await fetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}/guest-accounts`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!res.ok) {
+      return false;
+    }
+
+    if (user?.id) {
+      const refreshed = await fetchWorkspaces(user.id);
+      setWorkspaces(refreshed);
+      if (currentWorkspace?.id) {
+        const updatedCurrent =
+          refreshed.find((ws) => ws.id === currentWorkspace.id) ||
+          refreshed[0] ||
+          null;
+        setCurrentWorkspaceState(updatedCurrent);
+      }
+    }
+
+    return true;
   };
 
   const getUserRole = (): "owner" | "employee" | null => {
@@ -459,6 +497,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     <WorkspaceContext.Provider
       value={{
         workspaces,
+        isLoading,
         currentWorkspace,
         setCurrentWorkspace,
         createWorkspace,

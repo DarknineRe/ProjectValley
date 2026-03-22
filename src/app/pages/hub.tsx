@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Leaf, LogOut, Users, Code, ChevronRight, Building2, Trash2 } from "lucide-react";
+import { Leaf, LogOut, Users, Code, ChevronRight, Building2, Trash2, Store } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
@@ -48,7 +48,7 @@ export function Hub() {
 
   const handleSelectWorkspace = (workspace: Workspace) => {
     setCurrentWorkspace(workspace);
-    navigate("/workspace/marketplace");
+    navigate(isAdmin ? "/workspace/marketplace" : "/workspace/inventory");
   };
 
   const handleDeleteWorkspace = async () => {
@@ -150,6 +150,24 @@ export function Hub() {
                 : "บัญชีนี้สามารถเข้าใช้งานได้เฉพาะ Workspace ของตนเอง"}
             </p>
           </div>
+
+          {isAdmin && (
+            <Card
+              className="p-6 mb-6 cursor-pointer hover:shadow-lg transition-shadow border-2 border-emerald-200 hover:border-emerald-400"
+              onClick={() => navigate("/workspace/marketplace")}
+            >
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-emerald-100 rounded-full">
+                  <Store className="h-6 w-6 text-emerald-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg text-gray-900">ตลาดกลาง (Marketplace)</h3>
+                  <p className="text-sm text-gray-600">เฉพาะผู้ดูแลระบบ สามารถดูข้อมูลรวมทุก Workspace</p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-gray-400" />
+              </div>
+            </Card>
+          )}
 
           {/* Workspace List */}
           {visibleWorkspaces.length > 0 && (

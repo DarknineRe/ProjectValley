@@ -18,9 +18,10 @@ import {
 type RoleMode = "admin" | "merchant" | "buyer";
 
 const navItems = [
-  { path: "/workspace/marketplace", label: "ตลาดกลาง", icon: Store, permissionKey: "viewInventory" as const, audience: ["admin", "merchant"] as RoleMode[] },
+  { path: "/workspace/marketplace", label: "ตลาดกลาง", icon: Store, permissionKey: "viewInventory" as const, audience: ["admin"] as RoleMode[] },
   { path: "/workspace/inventory", label: "จัดการสต็อก", icon: Package, permissionKey: "viewInventory" as const, audience: ["admin", "merchant"] as RoleMode[] },
   { path: "/workspace/summary", label: "สรุปสต็อก", icon: BarChart2, permissionKey: "viewSummary" as const, audience: ["admin", "merchant"] as RoleMode[] },
+  { path: "/workspace/price-search", label: "เช็กราคา", icon: BarChart3, permissionKey: "viewPriceComparison" as const, audience: ["admin", "merchant", "buyer"] as RoleMode[] },
   { path: "/workspace/calendar", label: "ปฏิทินการปลูก", icon: Calendar, permissionKey: "viewCalendar" as const, audience: ["admin", "merchant"] as RoleMode[] },
   { path: "/workspace/members", label: "สมาชิก", icon: Users, permissionKey: "viewMembers" as const, audience: ["admin"] as RoleMode[] },
   { path: "/workspace/activity", label: "ประวัติการเปลี่ยนแปลง", icon: ClipboardList, permissionKey: "viewActivity" as const, audience: ["admin", "merchant"] as RoleMode[] },
@@ -30,7 +31,7 @@ export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const { currentWorkspace, getUserRole, getUserPermissions } = useWorkspace();
+  const { currentWorkspace, isLoading, getUserRole, getUserPermissions } = useWorkspace();
   const { user, logout, isAuthenticated } = useAuth();
   const userRole = getUserRole();
   const permissions = getUserPermissions();
@@ -62,7 +63,7 @@ export function Layout() {
   useEffect(() => {
     if (!isAuthenticated) {
       navigate("/login");
-    } else if (!currentWorkspace) {
+    } else if (!isLoading && !currentWorkspace) {
       navigate("/hub");
     } else if (accessibleNavItems.length > 0) {
       const canAccessCurrent = accessibleNavItems.some(
@@ -72,7 +73,7 @@ export function Layout() {
         navigate(accessibleNavItems[0].path);
       }
     }
-  }, [isAuthenticated, currentWorkspace, accessibleNavItems, location.pathname, navigate]);
+  }, [isAuthenticated, isLoading, currentWorkspace, accessibleNavItems, location.pathname, navigate]);
 
   const handleLogout = () => {
     logout();
@@ -92,7 +93,7 @@ export function Layout() {
       .slice(0, 2);
   };
 
-  if (!isAuthenticated || !currentWorkspace) {
+  if (!isAuthenticated || isLoading || !currentWorkspace) {
     return null;
   }
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -33,25 +33,79 @@ interface PriceData {
   unit?: string;
 }
 
-const PRODUCTS = [
-  { id: "P11001", name: "ข้าวเจ้า" },
-  { id: "P11002", name: "ข้าวเหนียว" },
-  { id: "P11012", name: "ถั่วเขียว" },
-  { id: "P11013", name: "ถั่วแดง" },
-  { id: "P12001", name: "ปลาทู" },
-  { id: "P12002", name: "ปลาสลิด" },
-  { id: "P13001", name: "หมู" },
-  { id: "P13002", name: "ไก่" },
-  { id: "P14001", name: "ไข่ไก่" },
-];
+interface ProductOption {
+  id: string;
+  name: string;
+}
 
 export function PriceSearch() {
-  const [productId, setProductId] = useState("P11012");
+  const [productId, setProductId] = useState("");
+  const [productSearchText, setProductSearchText] = useState("");
+  const [products, setProducts] = useState<ProductOption[]>([]);
   const [fromDate, setFromDate] = useState("2026-02-27");
   const [toDate, setToDate] = useState("2026-02-28");
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [searchResults, setSearchResults] = useState<PriceData[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProducts = async () => {
+      setIsLoadingProducts(true);
+      try {
+        const base = API_BASE;
+        const response = await fetch(`${base}/api/market-prices/products?limit=500`);
+        if (!response.ok) {
+          throw new Error("ไม่สามารถโหลดรายการสินค้าได้");
+        }
+
+        const data = await response.json();
+        if (cancelled) return;
+
+        const normalized: ProductOption[] = Array.isArray(data)
+          ? data
+              .map((item) => ({
+                id: String(item.id || "").toUpperCase(),
+                name: String(item.name || item.id || "").trim(),
+              }))
+              .filter((item) => item.id.length > 0)
+          : [];
+
+        setProducts(normalized);
+
+        if (normalized.length > 0) {
+          const firstProduct = normalized[0];
+          setProductId(firstProduct.id);
+          setProductSearchText(`${firstProduct.name} (${firstProduct.id})`);
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          toast.error(error.message || "โหลดรายการสินค้าไม่สำเร็จ");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingProducts(false);
+        }
+      }
+    };
+
+    loadProducts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filteredProducts = useMemo(() => {
+    const q = productSearchText.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(
+      (product) =>
+        product.id.toLowerCase().includes(q) ||
+        product.name.toLowerCase().includes(q)
+    );
+  }, [products, productSearchText]);
 
   const handleSearch = async () => {
     if (!productId || !fromDate || !toDate) {
@@ -61,7 +115,7 @@ export function PriceSearch() {
 
     setIsLoading(true);
     try {
-      const base = import.meta.env.VITE_API_URL || API_BASE;
+      const base = API_BASE;
       const url = `${base}/api/market-prices/history/${productId}?from_date=${fromDate}&to_date=${toDate}`;
       
       const response = await fetch(url);
@@ -135,18 +189,38 @@ export function PriceSearch() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-4">
           <Label className="text-sm font-medium mb-2 block">เลือกสินค้า</Label>
-          <Select value={productId} onValueChange={setProductId}>
-            <SelectTrigger>
-              <SelectValue />
+          <Input
+            value={productSearchText}
+            onChange={(e) => setProductSearchText(e.target.value)}
+            placeholder="พิมพ์ชื่อหรือรหัสสินค้า"
+            className="mb-2"
+          />
+          <Select
+            value={productId}
+            onValueChange={(value) => {
+              setProductId(value);
+              const selected = products.find((product) => product.id === value);
+              if (selected) {
+                setProductSearchText(`${selected.name} (${selected.id})`);
+              }
+            }}
+          >
+            <SelectTrigger disabled={isLoadingProducts || products.length === 0}>
+              <SelectValue placeholder={isLoadingProducts ? "กำลังโหลดสินค้า..." : "เลือกสินค้า"} />
             </SelectTrigger>
             <SelectContent>
-              {PRODUCTS.map((product) => (
-                <SelectItem key={product.id} value={product.id}>
-                  {product.name}
-                </SelectItem>
-              ))}
+              {filteredProducts.length > 0 ? (
+                filteredProducts.map((product) => (
+                  <SelectItem key={product.id} value={product.id}>
+                    {product.name} ({product.id})
+                  </SelectItem>
+                ))
+              ) : (
+                <div className="px-2 py-2 text-sm text-gray-500">ไม่พบสินค้า</div>
+              )}
             </SelectContent>
           </Select>
+          <p className="mt-2 text-xs text-gray-500">สินค้าทั้งหมด {products.length} รายการ</p>
         </Card>
 
         <Card className="p-4">
@@ -178,7 +252,7 @@ export function PriceSearch() {
         <Card className="p-4 flex flex-col justify-end">
           <Button
             onClick={handleSearch}
-            disabled={isLoading}
+            disabled={isLoading || isLoadingProducts || !productId}
             className="w-full bg-blue-600 hover:bg-blue-700"
           >
             <Search className="h-4 w-4 mr-2" />

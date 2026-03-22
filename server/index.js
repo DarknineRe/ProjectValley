@@ -172,6 +172,58 @@ async function generateUniqueWorkspaceCode() {
     throw new Error('Failed to generate unique workspace code');
 }
 
+async function generateUniqueWorkspaceCodeWithClient(client) {
+    for (let i = 0; i < 10; i++) {
+        const code = generateWorkspaceCode();
+        const { rows } = await client.query('SELECT id FROM workspaces WHERE code = $1 LIMIT 1', [code]);
+        if (rows.length === 0) {
+            return code;
+        }
+    }
+    throw new Error('Failed to generate unique workspace code');
+}
+
+async function createOwnedWorkspaceForUser(client, userId, ownerName) {
+    const workspaceId = `${Date.now()}_${String(userId)}`;
+    const workspaceCode = await generateUniqueWorkspaceCodeWithClient(client);
+    const workspaceName = `${ownerName} Workspace`;
+
+    await client.query(
+        'INSERT INTO workspaces (id, name, code, owner_id) VALUES ($1, $2, $3, $4)',
+        [workspaceId, workspaceName, workspaceCode, String(userId)]
+    );
+
+    await client.query(
+        `INSERT INTO workspace_members (
+            workspace_id,
+            user_id,
+            role,
+            can_view,
+            can_add,
+            can_edit,
+            can_manage_permissions,
+            view_dashboard,
+            view_inventory,
+            view_summary,
+            view_calendar,
+            view_analysis,
+            view_price_comparison,
+            view_recommendations,
+            view_members,
+            view_activity
+        ) VALUES ($1, $2, 'owner', true, true, true, true, true, true, true, true, true, true, true, true, true)
+        ON CONFLICT (workspace_id, user_id) DO NOTHING`,
+        [workspaceId, String(userId)]
+    );
+
+    return {
+        id: workspaceId,
+        name: workspaceName,
+        code: workspaceCode,
+        ownerId: String(userId),
+    };
+}
+
 // --- Workspaces API ---
 
 app.get('/api/workspaces', async (req, res) => {
@@ -724,6 +776,104 @@ app.put('/api/workspaces/:id/members/:memberId/permissions', async (req, res) =>
     }
 });
 
+app.post('/api/workspaces/:id/guest-accounts', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const workspaceId = req.params.id;
+        const { creatorUserId, name, email, password } = req.body;
+
+        if (!workspaceId || !creatorUserId || !name || !email || !password) {
+            return res.status(400).json({ error: 'workspace id, creatorUserId, name, email and password are required' });
+        }
+
+        await client.query('BEGIN');
+
+        const { rows: creatorRows } = await client.query(
+            'SELECT role FROM users WHERE id = $1 LIMIT 1',
+            [String(creatorUserId)]
+        );
+
+        if (creatorRows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Creator user not found' });
+        }
+
+        const creatorIsGlobalAdmin = creatorRows[0].role === 'admin';
+
+        const { rows: workspaceRows } = await client.query(
+            'SELECT id, owner_id FROM workspaces WHERE id = $1 LIMIT 1',
+            [workspaceId]
+        );
+
+        if (workspaceRows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Workspace not found' });
+        }
+
+        const workspace = workspaceRows[0];
+
+        if (!creatorIsGlobalAdmin && workspace.owner_id !== String(creatorUserId)) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: 'Only workspace owner can create guest accounts' });
+        }
+
+        let userId;
+        const normalizedEmail = String(email).trim().toLowerCase();
+
+        const { rows: existingUsers } = await client.query(
+            'SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1',
+            [normalizedEmail]
+        );
+
+        if (existingUsers.length > 0) {
+            userId = String(existingUsers[0].id);
+        } else {
+            const { rows: createdUsers } = await client.query(
+                'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id',
+                [String(name).trim(), normalizedEmail, String(password), 'farmer']
+            );
+            userId = String(createdUsers[0].id);
+        }
+
+        await client.query(
+            `INSERT INTO workspace_members (
+                workspace_id,
+                user_id,
+                role,
+                can_view,
+                can_add,
+                can_edit,
+                can_manage_permissions,
+                view_dashboard,
+                view_inventory,
+                view_summary,
+                view_calendar,
+                view_analysis,
+                view_price_comparison,
+                view_recommendations,
+                view_members,
+                view_activity
+            ) VALUES ($1, $2, 'employee', true, false, false, false, true, true, true, true, true, true, true, true, true)
+            ON CONFLICT (workspace_id, user_id) DO NOTHING`,
+            [workspaceId, userId]
+        );
+
+        await client.query('COMMIT');
+
+        return res.status(201).json({
+            success: true,
+            workspaceId,
+            userId,
+            email: normalizedEmail,
+        });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+});
+
 // --- Authentication API ---
 
 function generateOtpCode() {
@@ -915,13 +1065,26 @@ async function handleVerifyRegisterOtp(req, res) {
             return res.status(409).json({ error: 'Email already exists' });
         }
 
-        const insertResult = await pool.query(
-            'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id',
-            [pendingUser.name, pendingUser.email, pendingUser.password, pendingUser.role]
-        );
+        const client = await pool.connect();
+        let newUserId;
+        let createdWorkspace;
+        try {
+            await client.query('BEGIN');
+            const insertResult = await client.query(
+                'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id',
+                [pendingUser.name, pendingUser.email, pendingUser.password, pendingUser.role]
+            );
+            newUserId = insertResult.rows[0].id;
+            createdWorkspace = await createOwnedWorkspaceForUser(client, newUserId, pendingUser.name);
+            await client.query('COMMIT');
+        } catch (txErr) {
+            await client.query('ROLLBACK');
+            throw txErr;
+        } finally {
+            client.release();
+        }
 
         registerOtpStore.delete(key);
-        const newUserId = insertResult.rows[0].id;
 
         return res.status(201).json({
             success: true,
@@ -932,6 +1095,7 @@ async function handleVerifyRegisterOtp(req, res) {
                 email: pendingUser.email,
                 role: pendingUser.role,
             },
+            workspace: createdWorkspace,
         });
     } catch (err) {
         console.error('[REGISTER OTP VERIFY] Error:', err.message, err.stack);
@@ -1037,11 +1201,22 @@ app.post('/api/auth/google', async (req, res) => {
             user = existingUsers[0];
         } else {
             // Create new user from Google auth
-            const insertResult = await pool.query(
-                'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
-                [name || email.split('@')[0], email, 'google_oauth', 'farmer']
-            );
-            user = insertResult.rows[0];
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                const insertResult = await client.query(
+                    'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
+                    [name || email.split('@')[0], email, 'google_oauth', 'farmer']
+                );
+                user = insertResult.rows[0];
+                await createOwnedWorkspaceForUser(client, user.id, user.name);
+                await client.query('COMMIT');
+            } catch (txErr) {
+                await client.query('ROLLBACK');
+                throw txErr;
+            } finally {
+                client.release();
+            }
         }
 
         res.json({
@@ -1532,6 +1707,27 @@ app.post('/api/activity-logs/:id/rollback', async (req, res) => {
 });
 
 // --- Market Price API (from MOC Thailand) ---
+
+/**
+ * Get market product catalog for selector/search
+ * GET /api/market-prices/products?limit=200
+ */
+app.get('/api/market-prices/products', async (req, res) => {
+    try {
+        const limit = Number(req.query.limit || 200);
+        const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 200;
+        const products = await getTrackedMarketProducts(safeLimit);
+
+        res.json(
+            products.map((product) => ({
+                id: String(product.id).toUpperCase(),
+                name: normalizeMarketProductName(product.name || product.id),
+            }))
+        );
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 /**
  * Fetch real-time market prices from Thailand MOC API

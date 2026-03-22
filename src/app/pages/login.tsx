@@ -15,7 +15,7 @@ export function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
-  const redirectTo = "/hub";
+  const redirectTo = "/workspace/marketplace";
 
   useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");

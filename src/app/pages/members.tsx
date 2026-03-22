@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useWorkspace } from "../context/workspace-context";
+import { useAuth } from "../context/auth-context";
 import type { WorkspaceMember, WorkspacePermissions } from "../context/workspace-context";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -41,6 +42,7 @@ import { th } from "date-fns/locale";
 
 export function Members() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const {
     currentWorkspace,
     inviteToWorkspace,
@@ -50,7 +52,9 @@ export function Members() {
     deleteWorkspace,
   } = useWorkspace();
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [guestName, setGuestName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [guestPassword, setGuestPassword] = useState("");
   const [copied, setCopied] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -87,16 +91,29 @@ export function Members() {
     }
   };
 
-  const handleInvite = () => {
-    if (!inviteEmail.trim()) {
-      toast.error("กรุณาใส่อีเมล");
+  const handleInvite = async () => {
+    if (!guestName.trim() || !inviteEmail.trim() || !guestPassword.trim()) {
+      toast.error("กรุณากรอกชื่อ อีเมล และรหัสผ่านของบัญชีผู้เยี่ยมชม");
       return;
     }
-    if (currentWorkspace) {
-      inviteToWorkspace(currentWorkspace.id, inviteEmail);
-      toast.success(`ส่งคำเชิญไปยัง ${inviteEmail} แล้ว`);
+    if (currentWorkspace && user?.id) {
+      const success = await inviteToWorkspace(currentWorkspace.id, {
+        creatorUserId: user.id,
+        name: guestName.trim(),
+        email: inviteEmail.trim(),
+        password: guestPassword,
+      });
+
+      if (!success) {
+        toast.error("ไม่สามารถสร้างบัญชีผู้เยี่ยมชมได้");
+        return;
+      }
+
+      toast.success(`สร้างบัญชีผู้เยี่ยมชม ${inviteEmail} สำเร็จ`);
       setIsInviteDialogOpen(false);
+      setGuestName("");
       setInviteEmail("");
+      setGuestPassword("");
     }
   };
 
@@ -523,10 +540,20 @@ export function Members() {
           <DialogHeader>
             <DialogTitle>เชิญสมาชิกเข้าร่วม</DialogTitle>
             <DialogDescription>
-              ส่งคำเชิญไปยังอีเมลของสมาชิกที่ต้องการเพิ่ม
+              สร้างบัญชีผู้เยี่ยมชมเพื่อเข้าร่วม Workspace นี้
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label htmlFor="guest-name">ชื่อผู้เยี่ยมชม</Label>
+              <Input
+                id="guest-name"
+                type="text"
+                placeholder="ชื่อผู้ใช้งาน"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="invite-email">อีเมล</Label>
               <Input
@@ -535,19 +562,25 @@ export function Members() {
                 placeholder="member@example.com"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="guest-password">รหัสผ่านเริ่มต้น</Label>
+              <Input
+                id="guest-password"
+                type="text"
+                placeholder="อย่างน้อย 6 ตัวอักษร"
+                value={guestPassword}
+                onChange={(e) => setGuestPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleInvite()}
               />
             </div>
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-900 mb-2">
-                💡 หรือแชร์รหัส Workspace
+                บัญชีนี้จะถูกเพิ่มเป็นผู้เยี่ยมชมอัตโนมัติ
               </p>
               <p className="text-xs text-blue-700">
-                คุณสามารถแชร์รหัส{" "}
-                <span className="font-mono font-bold">
-                  {currentWorkspace.code}
-                </span>{" "}
-                เพื่อให้สมาชิกเข้าร่วมได้เอง
+                ผู้เยี่ยมชมจะสามารถเข้าใช้งาน Workspace นี้ได้ทันทีด้วยอีเมลและรหัสผ่านที่สร้าง
               </p>
             </div>
             <div className="flex gap-2 justify-end">
@@ -555,7 +588,9 @@ export function Members() {
                 variant="outline"
                 onClick={() => {
                   setIsInviteDialogOpen(false);
+                  setGuestName("");
                   setInviteEmail("");
+                  setGuestPassword("");
                 }}
               >
                 ยกเลิก
