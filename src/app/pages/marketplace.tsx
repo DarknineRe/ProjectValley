@@ -23,7 +23,7 @@ import {
 export function Marketplace() {
   const { products, deleteProduct } = useData();
   const { user } = useAuth();
-  const { isGlobalAdmin, getUserRole, getUserPermissions } = useWorkspace();
+  const { currentWorkspace, isGlobalAdmin, getUserRole, getUserPermissions } = useWorkspace();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ทั้งหมด");
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -90,6 +90,9 @@ export function Marketplace() {
           <h2 className="text-3xl font-bold md:text-4xl">Discover Our Latest Collection</h2>
           <p className="mt-2 max-w-2xl text-sm text-neutral-200 md:text-base">
             ตลาดกลางสไตล์โชว์เคสสินค้า เน้นดูรายการและเทียบข้อเสนอแบบไม่มีตะกร้า โดยผู้ดูแลยังแก้ไขสินค้าได้ตามปกติ
+          </p>
+          <p className="mt-2 text-xs text-emerald-200">
+            Workspace ปัจจุบัน: {currentWorkspace?.name || "-"}
           </p>
           <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/40 bg-emerald-200/10 px-4 py-2 text-sm text-emerald-100">
             <Sparkles className="h-4 w-4" />

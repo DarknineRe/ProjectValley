@@ -191,6 +191,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     try {
       setIsLoading(true);
+      // Clear previous workspace data immediately to avoid stale cross-workspace display.
+      setProducts([]);
+      setSchedules([]);
+      setPriceHistory([]);
+      setActivityLogs([]);
       const workspaceQuery = `workspace_id=${encodeURIComponent(currentWorkspace.id)}`;
       const [productsRes, schedulesRes, priceHistoryRes, activityLogsRes] = await Promise.all([
         fetch(`${API_BASE}/api/products?${workspaceQuery}`),
