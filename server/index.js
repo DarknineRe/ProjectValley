@@ -1308,10 +1308,6 @@ app.get('/api/public/products', async (req, res) => {
 // Admin endpoint: fetch all products from all workspaces
 app.get('/api/admin/all-products', async (req, res) => {
     try {
-        const user = req.user;
-        if (!user || !isGlobalAdminUser(user)) {
-            return res.status(403).json({ error: 'Not authorized' });
-        }
         const { rows } = await pool.query(`
             SELECT
                 p.*,
