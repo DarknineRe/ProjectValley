@@ -39,6 +39,7 @@ import { Users, UserPlus, Copy, CheckCircle, Code, Crown, User, Trash2 } from "l
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
+import { API_BASE } from "../../api";
 
 export function Members() {
   const navigate = useNavigate();
@@ -59,6 +60,9 @@ export function Members() {
   const [copied, setCopied] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isTransferOwnershipDialogOpen, setIsTransferOwnershipDialogOpen] = useState(false);
+  const [selectedNewOwnerId, setSelectedNewOwnerId] = useState<string>("");
+  const [isTransferring, setIsTransferring] = useState(false);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
   const [selectedMemberForViewsId, setSelectedMemberForViewsId] = useState<string | null>(null);
   const [viewPermissionDraft, setViewPermissionDraft] = useState<
@@ -134,6 +138,38 @@ export function Members() {
       toast.error("ไม่สามารถลบ Workspace ได้");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleTransferOwnership = async () => {
+    if (!currentWorkspace || !selectedNewOwnerId) {
+      toast.error("กรุณาเลือกเจ้าของใหม่");
+      return;
+    }
+
+    setIsTransferring(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/workspaces/${currentWorkspace.id}/transfer-ownership`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newOwnerId: selectedNewOwnerId })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        toast.error(`ไม่สามารถโอนความเป็นเจ้าของได้: ${error.error}`);
+        return;
+      }
+
+      toast.success("โอนความเป็นเจ้าของ Workspace สำเร็จ");
+      setIsTransferOwnershipDialogOpen(false);
+      setSelectedNewOwnerId("");
+      // Refresh by navigating to hub and back
+      navigate("/hub");
+    } catch (error) {
+      toast.error("เกิดข้อผิดพลาดในการโอนความเป็นเจ้าของ");
+    } finally {
+      setIsTransferring(false);
     }
   };
 
@@ -272,14 +308,24 @@ export function Members() {
             เชิญสมาชิก
           </Button>
           {(isWorkspaceOwner || isGlobalAdmin) && (
-            <Button
-              variant="outline"
-              className="text-red-600 hover:text-red-700"
-              onClick={() => setIsDeleteConfirmOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              ลบ Workspace
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                className="text-purple-600 hover:text-purple-700"
+                onClick={() => setIsTransferOwnershipDialogOpen(true)}
+              >
+                <Crown className="h-4 w-4 mr-2" />
+                โอนความเป็นเจ้าของ
+              </Button>
+              <Button
+                variant="outline"
+                className="text-red-600 hover:text-red-700"
+                onClick={() => setIsDeleteConfirmOpen(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                ลบ Workspace
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -679,6 +725,60 @@ export function Members() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={isTransferOwnershipDialogOpen} onOpenChange={setIsTransferOwnershipDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>โอนความเป็นเจ้าของ Workspace</DialogTitle>
+            <DialogDescription>
+              เลือกสมาชิกใหม่ที่จะเป็นเจ้าของ Workspace {currentWorkspace.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>เจ้าของปัจจุบัน: {owner?.name}</Label>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-owner">เลือกเจ้าของใหม่</Label>
+              <select
+                id="new-owner"
+                value={selectedNewOwnerId}
+                onChange={(e) => setSelectedNewOwnerId(e.target.value)}
+                title="เลือกเจ้าของใหม่"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              >
+                <option value="">-- เลือกสมาชิก --</option>
+                {currentWorkspace.members
+                  .filter((m) => m.id !== owner?.id)
+                  .map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} ({getMemberLabel(member)})
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsTransferOwnershipDialogOpen(false);
+                setSelectedNewOwnerId("");
+              }}
+              disabled={isTransferring}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              onClick={handleTransferOwnership}
+              disabled={isTransferring || !selectedNewOwnerId}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {isTransferring ? "กำลังโอน..." : "โอนความเป็นเจ้าของ"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -890,6 +890,42 @@ app.post('/api/workspaces/:id/guest-accounts', async (req, res) => {
     }
 });
 
+// Transfer workspace ownership to a different user
+app.put('/api/workspaces/:id/transfer-ownership', async (req, res) => {
+    try {
+        const workspaceId = req.params.id;
+        const { newOwnerId } = req.body;
+
+        if (!workspaceId || !newOwnerId) {
+            return res.status(400).json({ error: 'workspaceId and newOwnerId are required' });
+        }
+
+        // Verify the new owner exists
+        const { rows: userRows } = await pool.query('SELECT id FROM users WHERE id = $1', [newOwnerId]);
+        if (userRows.length === 0) {
+            return res.status(404).json({ error: 'New owner user not found' });
+        }
+
+        // Update the workspace owner
+        const { rows } = await pool.query(
+            'UPDATE workspaces SET owner_id = $1 WHERE id = $2 RETURNING *',
+            [newOwnerId, workspaceId]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Workspace not found' });
+        }
+
+        res.json({
+            success: true,
+            message: 'Workspace ownership transferred',
+            workspace: rows[0]
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // --- Authentication API ---
 
 function generateOtpCode() {
