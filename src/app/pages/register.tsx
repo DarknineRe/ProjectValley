@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useLocation, useNavigate, Link } from "react-router";
+import { useState } from "react";
+import { useNavigate, Link } from "react-router";
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from "../context/auth-context";
 import { Card } from "../components/ui/card";
@@ -10,7 +10,6 @@ import { Leaf, Lock, Mail, User as UserIcon, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 export function Register() {
-  const location = useLocation();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,9 +20,7 @@ export function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const { register, verifyRegisterOtp, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
-  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const mode = params.get("mode") === "buyer" ? "buyer" : "seller";
-  const redirectTo = params.get("redirect") || (mode === "buyer" ? "/cart" : "/hub");
+  const redirectTo = "/hub";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,7 +106,7 @@ export function Register() {
       <Card className="w-full max-w-md p-8">
         {/* Back Button */}
         <Link 
-          to={`/login?mode=${mode}&redirect=${encodeURIComponent(redirectTo)}`} 
+          to="/login"
           className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-6"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -121,12 +118,10 @@ export function Register() {
             <Leaf className="h-8 w-8 text-green-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {mode === "buyer" ? "สมัครสมาชิกผู้ซื้อ" : "สมัครสมาชิก"}
+            สมัครสมาชิก
           </h1>
           <p className="text-gray-600">
-            {mode === "buyer"
-              ? "สมัครสมาชิกเพื่อบันทึกโปรไฟล์และยืนยันการสั่งซื้อ"
-              : "สร้างบัญชีใหม่เพื่อเริ่มจัดการผลผลิตทางการเกษตร"}
+            สร้างบัญชีใหม่เพื่อเริ่มจัดการผลผลิตทางการเกษตร
           </p>
         </div>
 
@@ -290,7 +285,7 @@ export function Register() {
           <p className="text-sm text-gray-600">
             มีบัญชีอยู่แล้ว?{" "}
             <Link 
-              to={`/login?mode=${mode}&redirect=${encodeURIComponent(redirectTo)}`} 
+              to="/login"
               className="text-green-600 hover:text-green-700 font-medium"
             >
               เข้าสู่ระบบ

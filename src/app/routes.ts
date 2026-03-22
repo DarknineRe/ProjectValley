@@ -11,14 +11,11 @@ import { Register } from "./pages/register";
 import { Hub } from "./pages/hub";
 import { Profile } from "./pages/profile";
 import { PriceSearch } from "./pages/price-search";
-import { BuyerShop } from "./pages/buyer";
-import { CartPage } from "./pages/cart";
-import { ReceiptPage } from "./pages/receipt";
 
 export const router = createBrowserRouter([
   {
     path: "/",
-    Component: BuyerShop,
+    loader: () => redirect("/login"),
   },
   {
     path: "/login",
@@ -41,18 +38,6 @@ export const router = createBrowserRouter([
     Component: PriceSearch,
   },
   {
-    path: "/cart",
-    Component: CartPage,
-  },
-  {
-    path: "/receipt/:receiptId",
-    Component: ReceiptPage,
-  },
-  {
-    path: "/buyer",
-    Component: BuyerShop,
-  },
-  {
     path: "/workspace",
     Component: Layout,
     children: [
@@ -67,6 +52,6 @@ export const router = createBrowserRouter([
   },
   {
     path: "*",
-    loader: () => redirect("/"),
+    loader: () => redirect("/login"),
   },
 ]);

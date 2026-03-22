@@ -1,29 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, Link } from "react-router";
+import { useEffect, useState } from "react";
+import { useNavigate, Link } from "react-router";
 import { useGoogleLogin } from '@react-oauth/google';
 import { useAuth } from "../context/auth-context";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Leaf, Lock, Mail, ShoppingBag, Store } from "lucide-react";
+import { Leaf, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
 
 export function Login() {
-  const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
-  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const requestedMode = params.get("mode") === "buyer" ? "buyer" : "seller";
-  const redirectTo = params.get("redirect") || (requestedMode === "buyer" ? "/cart" : "/hub");
-  const [selectedMode, setSelectedMode] = useState<"buyer" | "seller">(requestedMode);
-
-  useEffect(() => {
-    setSelectedMode(requestedMode);
-  }, [requestedMode]);
+  const redirectTo = "/hub";
 
   useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");
@@ -78,63 +70,13 @@ export function Login() {
             <Leaf className="h-8 w-8 text-green-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            เลือกการใช้งาน
+            เข้าสู่ระบบ
           </h1>
-          <p className="text-gray-600 text-sm mb-4">
-            ผู้ซื้อเข้าดูสินค้าหน้าหลักได้ทันที ส่วนผู้ขายเข้าสู่ระบบเพื่อจัดการร้าน
+          <p className="text-gray-600 text-sm">
+            เข้าสู่ระบบเพื่อจัดการร้านและข้อมูลผลผลิต
           </p>
-          <div className="grid grid-cols-2 gap-3 text-left">
-            <button
-              type="button"
-              className={`rounded-xl border p-4 transition-colors ${
-                selectedMode === "buyer"
-                  ? "border-emerald-600 bg-emerald-50"
-                  : "border-gray-200 bg-white"
-              }`}
-              onClick={() => setSelectedMode("buyer")}
-            >
-              <ShoppingBag className="mb-2 h-5 w-5 text-emerald-700" />
-              <p className="font-semibold text-gray-900">ผู้ซื้อ</p>
-              <p className="text-xs text-gray-600">ดูสินค้าและราคาที่หน้าแรก</p>
-            </button>
-            <button
-              type="button"
-              className={`rounded-xl border p-4 transition-colors ${
-                selectedMode === "seller"
-                  ? "border-emerald-600 bg-emerald-50"
-                  : "border-gray-200 bg-white"
-              }`}
-              onClick={() => setSelectedMode("seller")}
-            >
-              <Store className="mb-2 h-5 w-5 text-emerald-700" />
-              <p className="font-semibold text-gray-900">ผู้ขาย</p>
-              <p className="text-xs text-gray-600">จัดการสินค้าและลงขายในตลาด</p>
-            </button>
-          </div>
         </div>
 
-        {selectedMode === "buyer" ? (
-          <div className="space-y-4 mt-6">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-              หน้าหลักของเว็บคือหน้าผู้ซื้อแล้ว คุณสามารถเข้าไปเลือกซื้อสินค้า ดูรูปสินค้า และเช็กราคาได้ทันที
-            </div>
-            <Button
-              type="button"
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
-              onClick={() => navigate("/")}
-            >
-              ไปหน้าผู้ซื้อ
-            </Button>
-            <div className="grid grid-cols-2 gap-2">
-              <Button type="button" variant="outline" onClick={() => navigate(`/login?mode=buyer&redirect=${encodeURIComponent("/cart")}`)}>
-                เข้าสู่ระบบผู้ซื้อ
-              </Button>
-              <Button type="button" variant="outline" onClick={() => navigate(`/register?mode=buyer&redirect=${encodeURIComponent("/cart")}`)}>
-                สมัครผู้ซื้อ
-              </Button>
-            </div>
-          </div>
-        ) : (
         <form onSubmit={handleSubmit} className="space-y-4 mt-6">
           <div className="space-y-2">
             <Label htmlFor="email">อีเมล</Label>
@@ -176,9 +118,7 @@ export function Login() {
             {isLoading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
           </Button>
         </form>
-        )}
 
-        {selectedMode === "seller" && (
         <>
         <div className="mt-6 relative">
           <div className="absolute inset-0 flex items-center">
@@ -221,7 +161,7 @@ export function Login() {
           <p className="text-sm text-gray-600">
             ยังไม่มีบัญชี?{" "}
             <Link 
-              to={`/register?mode=${selectedMode}&redirect=${encodeURIComponent(redirectTo)}`} 
+              to="/register"
               className="text-green-600 hover:text-green-700 font-medium"
             >
               สมัครสมาชิก
@@ -229,7 +169,6 @@ export function Login() {
           </p>
         </div>
         </>
-        )}
 
 
       </Card>
