@@ -25,8 +25,23 @@ if (!dbName) {
 let poolConfig;
 if (connectionString) {
     console.log('Using DATABASE_URL for postgres connection');
+    let ssl;
+    try {
+        const url = new URL(connectionString);
+        const isRenderHost = /render\.com$/i.test(url.hostname);
+        const sslMode = String(process.env.PGSSLMODE || '').toLowerCase();
+        if (sslMode === 'disable') {
+            ssl = undefined;
+        } else if (isRenderHost || sslMode === 'require') {
+            ssl = { rejectUnauthorized: false };
+        }
+    } catch (_) {
+        ssl = undefined;
+    }
+
     poolConfig = {
         connectionString,
+        ...(ssl ? { ssl } : {}),
         max: 10
     };
 } else {
