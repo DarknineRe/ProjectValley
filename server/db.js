@@ -385,9 +385,7 @@ async function seedData(client) {
         const usersResult = await client.query('SELECT COUNT(*) as count FROM users');
         if (parseInt(usersResult.rows[0].count, 10) === 0) {
             const initialUsers = [
-                ["สมชาย เกษตรกร", "farmer@example.com", "password123", "farmer"],
-                ["ศรีสมหมาย เกษตรกร", "srisommai@example.com", "password123", "farmer"],
-                ["admin", "admin@example.com", "admin123", "admin"]
+                ["สมชาย เกษตรกร", "farmer@example.com", "password123", "farmer"]
             ];
             for (const user of initialUsers) {
                 await client.query(

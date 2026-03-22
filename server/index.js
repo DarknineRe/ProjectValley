@@ -241,6 +241,82 @@ async function createOwnedWorkspaceForUser(client, userId, ownerName) {
     };
 }
 
+async function ensureAdminSharedWorkspace(client, adminUserId) {
+    const { rows: farmerRows } = await client.query(
+        'SELECT id, name FROM users WHERE email = $1 LIMIT 1',
+        ['farmer@example.com']
+    );
+
+    if (farmerRows.length === 0) {
+        throw new Error('Shared workspace owner (farmer@example.com) not found');
+    }
+
+    const farmer = farmerRows[0];
+    const { rows: workspaceRows } = await client.query(
+        'SELECT id, name, code, owner_id FROM workspaces WHERE owner_id = $1 ORDER BY created_at ASC LIMIT 1',
+        [String(farmer.id)]
+    );
+
+    let workspace;
+    if (workspaceRows.length === 0) {
+        workspace = await createOwnedWorkspaceForUser(client, farmer.id, farmer.name || 'Farmer');
+    } else {
+        const row = workspaceRows[0];
+        workspace = {
+            id: row.id,
+            name: row.name,
+            code: row.code,
+            ownerId: String(row.owner_id),
+        };
+    }
+
+    await client.query(
+        `INSERT INTO workspace_members (
+            workspace_id,
+            user_id,
+            role,
+            can_view,
+            can_add,
+            can_edit,
+            can_manage_permissions,
+            view_dashboard,
+            view_inventory,
+            view_summary,
+            view_calendar,
+            view_analysis,
+            view_price_comparison,
+            view_recommendations,
+            view_members,
+            view_activity
+        ) VALUES ($1, $2, 'employee', true, true, true, true, true, true, true, true, true, true, true, true, true)
+        ON CONFLICT (workspace_id, user_id) DO NOTHING`,
+        [workspace.id, String(adminUserId)]
+    );
+
+    return workspace;
+}
+
+async function ensureWorkspaceMembershipForUser(client, user) {
+    const { rows: membershipRows } = await client.query(
+        'SELECT COUNT(*)::int AS count FROM workspace_members WHERE user_id = $1',
+        [String(user.id)]
+    );
+    const membershipCount = membershipRows[0]?.count || 0;
+    if (membershipCount > 0) {
+        return null;
+    }
+
+    if (isGlobalAdminUser(user)) {
+        return await ensureAdminSharedWorkspace(client, user.id);
+    }
+
+    return await createOwnedWorkspaceForUser(
+        client,
+        user.id,
+        user.name || String(user.email || 'user').split('@')[0]
+    );
+}
+
 // --- Workspaces API ---
 
 app.get('/api/workspaces', async (req, res) => {
@@ -969,6 +1045,18 @@ async function handleLogin(req, res) {
 
         const user = users[0];
 
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            await ensureWorkspaceMembershipForUser(client, user);
+            await client.query('COMMIT');
+        } catch (txErr) {
+            await client.query('ROLLBACK');
+            throw txErr;
+        } finally {
+            client.release();
+        }
+
         res.json({
             success: true,
             user: {
@@ -1127,7 +1215,12 @@ async function handleVerifyRegisterOtp(req, res) {
                 [pendingUser.name, pendingUser.email, pendingUser.password, pendingUser.role]
             );
             newUserId = insertResult.rows[0].id;
-            createdWorkspace = await createOwnedWorkspaceForUser(client, newUserId, pendingUser.name);
+            createdWorkspace = await ensureWorkspaceMembershipForUser(client, {
+                id: newUserId,
+                name: pendingUser.name,
+                email: pendingUser.email,
+                role: pendingUser.role,
+            });
             await client.query('COMMIT');
         } catch (txErr) {
             await client.query('ROLLBACK');
@@ -1252,28 +1345,16 @@ app.post('/api/auth/google', async (req, res) => {
         if (existingUsers.length > 0) {
             user = existingUsers[0];
 
-            // Backfill workspace for legacy accounts that existed before auto-workspace logic.
-            if (!isGlobalAdminUser(user)) {
-                const client = await pool.connect();
-                try {
-                    await client.query('BEGIN');
-                    const { rows: membershipRows } = await client.query(
-                        'SELECT COUNT(*)::int AS count FROM workspace_members WHERE user_id = $1',
-                        [String(user.id)]
-                    );
-                    const membershipCount = membershipRows[0]?.count || 0;
-
-                    if (membershipCount === 0) {
-                        await createOwnedWorkspaceForUser(client, user.id, user.name || email.split('@')[0]);
-                    }
-
-                    await client.query('COMMIT');
-                } catch (txErr) {
-                    await client.query('ROLLBACK');
-                    throw txErr;
-                } finally {
-                    client.release();
-                }
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                await ensureWorkspaceMembershipForUser(client, user);
+                await client.query('COMMIT');
+            } catch (txErr) {
+                await client.query('ROLLBACK');
+                throw txErr;
+            } finally {
+                client.release();
             }
         } else {
             // Create new user from Google auth
@@ -1285,7 +1366,7 @@ app.post('/api/auth/google', async (req, res) => {
                     [name || email.split('@')[0], email, 'google_oauth', 'farmer']
                 );
                 user = insertResult.rows[0];
-                await createOwnedWorkspaceForUser(client, user.id, user.name);
+                await ensureWorkspaceMembershipForUser(client, user);
                 await client.query('COMMIT');
             } catch (txErr) {
                 await client.query('ROLLBACK');
