@@ -63,15 +63,19 @@ export function Members() {
   const userPermissions = getUserPermissions();
   const isOwner = userRole === "owner";
   const canManagePermissions = isOwner || userPermissions.canManagePermissions;
-  const employees = currentWorkspace?.members.filter((m) => m.role === "employee") || [];
-  const merchants = employees.filter((member) => member.canAdd);
-  const buyers = employees.filter((member) => !member.canAdd);
+  const ownerMember = currentWorkspace
+    ? currentWorkspace.members.find((m) => m.id === currentWorkspace.ownerId) ||
+      currentWorkspace.members.find((m) => m.role === "owner") ||
+      null
+    : null;
+  const visibleMembers = currentWorkspace
+    ? currentWorkspace.members.filter((m) => m.id !== ownerMember?.id && m.role !== "owner")
+    : [];
+  const merchants = visibleMembers.filter((member) => member.canAdd);
+  const guests = visibleMembers.filter((member) => !member.canAdd);
 
   const getMemberLabel = (member: WorkspaceMember) => {
-    if (member.role === "owner") {
-      return "Admin";
-    }
-    return member.canAdd ? "ผู้ค้า" : "ผู้ซื้อ";
+    return member.canAdd ? "ผู้ค้า" : "ผู้เยี่ยมชม";
   };
 
   const handleCopyCode = () => {
@@ -149,7 +153,7 @@ export function Members() {
     );
   }
 
-  const owner = currentWorkspace.members.find((m) => m.role === "owner");
+  const owner = ownerMember;
   const selectedMemberForViews = selectedMemberForViewsId
     ? currentWorkspace.members.find((m) => m.id === selectedMemberForViewsId) || null
     : null;
@@ -311,7 +315,7 @@ export function Members() {
             <div>
               <p className="text-sm text-gray-600">สมาชิกทั้งหมด</p>
               <p className="text-2xl font-bold text-gray-900">
-                {currentWorkspace.members.length}
+                {visibleMembers.length + (owner ? 1 : 0)}
               </p>
             </div>
           </div>
@@ -323,7 +327,7 @@ export function Members() {
               <Crown className="h-6 w-6 text-green-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-600">Admin</p>
+              <p className="text-sm text-gray-600">เจ้าของ</p>
               <p className="text-2xl font-bold text-gray-900">1</p>
             </div>
           </div>
@@ -349,9 +353,9 @@ export function Members() {
               <User className="h-6 w-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-600">ผู้ซื้อ</p>
+              <p className="text-sm text-gray-600">ผู้เยี่ยมชม</p>
               <p className="text-2xl font-bold text-gray-900">
-                {buyers.length}
+                {guests.length}
               </p>
             </div>
           </div>
@@ -390,7 +394,7 @@ export function Members() {
                   <TableCell>{owner.email}</TableCell>
                   <TableCell>
                     <Badge className="bg-green-600 hover:bg-green-700">
-                      Admin
+                      เจ้าของ
                     </Badge>
                   </TableCell>
                   <TableCell className="text-center">
@@ -415,7 +419,7 @@ export function Members() {
                   </TableCell>
                 </TableRow>
               )}
-              {employees.map((member) => (
+              {visibleMembers.map((member) => (
                 <TableRow key={member.id}>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -575,7 +579,7 @@ export function Members() {
           <DialogHeader>
             <DialogTitle>กำหนดสิทธิ์การดูหน้า</DialogTitle>
             <DialogDescription>
-              เลือกหน้าที่สมาชิกคนนี้สามารถเข้าดูได้ เช่น ให้ผู้ซื้อดูเฉพาะตลาดกลางและหน้าสรุป
+              เลือกหน้าที่สมาชิกคนนี้สามารถเข้าดูได้ตามบทบาทที่กำหนด
             </DialogDescription>
           </DialogHeader>
 

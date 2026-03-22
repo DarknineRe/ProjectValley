@@ -70,7 +70,7 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
+  const [currentWorkspace, setCurrentWorkspaceState] = useState<Workspace | null>(null);
 
   const getCurrentWorkspaceKey = (userId: string) => `currentWorkspace:${userId}`;
 
@@ -150,7 +150,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user?.id) {
       setWorkspaces([]);
-      setCurrentWorkspace(null);
+      setCurrentWorkspaceState(null);
       return;
     }
 
@@ -164,20 +164,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setWorkspaces(fetchedWorkspaces);
 
         const storedWorkspaceId = localStorage.getItem(getCurrentWorkspaceKey(user.id));
+        const isAdmin = user.role === "admin";
         const matched = storedWorkspaceId
           ? fetchedWorkspaces.find((ws) => ws.id === storedWorkspaceId)
           : null;
 
-        if (matched) {
-          setCurrentWorkspace(matched);
+        if (!isAdmin && fetchedWorkspaces.length > 0) {
+          // Non-admin users are pinned to their assigned workspace.
+          setCurrentWorkspaceState(fetchedWorkspaces[0]);
+        } else if (matched) {
+          setCurrentWorkspaceState(matched);
         } else {
-          setCurrentWorkspace(fetchedWorkspaces[0] || null);
+          setCurrentWorkspaceState(fetchedWorkspaces[0] || null);
         }
       } catch (e) {
         console.error("Failed to load workspaces", e);
         if (!isCancelled) {
           setWorkspaces([]);
-          setCurrentWorkspace(null);
+          setCurrentWorkspaceState(null);
         }
       }
     };
@@ -188,6 +192,33 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       isCancelled = true;
     };
   }, [user?.id]);
+
+  const setCurrentWorkspace = (workspace: Workspace | null) => {
+    if (!user?.id) {
+      setCurrentWorkspaceState(null);
+      return;
+    }
+
+    const isAdmin = user.role === "admin";
+    if (isAdmin) {
+      setCurrentWorkspaceState(workspace);
+      return;
+    }
+
+    if (!workspace) {
+      setCurrentWorkspaceState(null);
+      return;
+    }
+
+    // Non-admin users can only keep the first assigned workspace.
+    const allowedWorkspace = workspaces[0] || null;
+    if (allowedWorkspace && workspace.id === allowedWorkspace.id) {
+      setCurrentWorkspaceState(workspace);
+      return;
+    }
+
+    setCurrentWorkspaceState(allowedWorkspace);
+  };
 
   useEffect(() => {
     if (!user?.id) return;
@@ -214,7 +245,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const created = normalizeWorkspace(await res.json());
     const nextWorkspaces = [created, ...workspaces];
     setWorkspaces(nextWorkspaces);
-    setCurrentWorkspace(created);
+    setCurrentWorkspaceState(created);
   };
 
   const joinWorkspace = async (code: string): Promise<boolean> => {
@@ -233,7 +264,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const joinedWorkspace = normalizeWorkspace(await res.json());
     const refreshed = await fetchWorkspaces(user.id);
     setWorkspaces(refreshed);
-    setCurrentWorkspace(
+    setCurrentWorkspaceState(
       refreshed.find((ws) => ws.id === joinedWorkspace.id) || joinedWorkspace
     );
     return true;
@@ -254,7 +285,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const nextWorkspaces = workspaces.filter((ws) => ws.id !== workspaceId);
     setWorkspaces(nextWorkspaces);
     if (currentWorkspace?.id === workspaceId) {
-      setCurrentWorkspace(nextWorkspaces[0] || null);
+      setCurrentWorkspaceState(nextWorkspaces[0] || null);
     }
 
     return true;
@@ -267,6 +298,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const getUserRole = (): "owner" | "employee" | null => {
     if (!user || !currentWorkspace) return null;
+    if (user.role === "admin") return "owner";
     const member = currentWorkspace.members.find((m) => m.id === user.id);
     return member?.role || null;
   };
@@ -287,6 +319,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         viewRecommendations: false,
         viewMembers: false,
         viewActivity: false,
+      };
+    }
+
+    if (user.role === "admin") {
+      return {
+        canView: true,
+        canAdd: true,
+        canEdit: true,
+        canManagePermissions: true,
+        viewDashboard: true,
+        viewInventory: true,
+        viewSummary: true,
+        viewCalendar: true,
+        viewAnalysis: true,
+        viewPriceComparison: true,
+        viewRecommendations: true,
+        viewMembers: true,
+        viewActivity: true,
       };
     }
 
@@ -399,7 +449,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setWorkspaces(nextWorkspaces);
     if (currentWorkspace?.id === workspaceId) {
       const updatedCurrent = nextWorkspaces.find((ws) => ws.id === workspaceId) || null;
-      setCurrentWorkspace(updatedCurrent);
+      setCurrentWorkspaceState(updatedCurrent);
     }
 
     return true;

@@ -181,7 +181,19 @@ app.get('/api/workspaces', async (req, res) => {
             return res.status(400).json({ error: 'user_id is required' });
         }
 
-        const sql = `
+        const { rows: requesterRows } = await pool.query(
+            'SELECT id, role FROM users WHERE id = $1 LIMIT 1',
+            [String(userId)]
+        );
+
+        if (requesterRows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const requester = requesterRows[0];
+        const isGlobalAdmin = requester.role === 'admin';
+
+        const baseSelect = `
             SELECT
                 w.id,
                 w.name,
@@ -207,14 +219,22 @@ app.get('/api/workspaces', async (req, res) => {
                 u.name AS member_name,
                 u.email AS member_email
             FROM workspaces w
-            JOIN workspace_members filter_wm ON filter_wm.workspace_id = w.id
             JOIN workspace_members wm ON wm.workspace_id = w.id
             JOIN users u ON u.id::text = wm.user_id
+        `;
+
+        const sql = isGlobalAdmin
+            ? `${baseSelect}
+            ORDER BY w.created_at DESC, wm.joined_at ASC`
+            : `${baseSelect}
+            JOIN workspace_members filter_wm ON filter_wm.workspace_id = w.id
             WHERE filter_wm.user_id = $1
             ORDER BY w.created_at DESC, wm.joined_at ASC
         `;
 
-        const { rows } = await pool.query(sql, [String(userId)]);
+        const { rows } = isGlobalAdmin
+            ? await pool.query(sql)
+            : await pool.query(sql, [String(userId)]);
 
         const workspaceMap = new Map();
 
@@ -501,7 +521,18 @@ app.delete('/api/workspaces/:id', async (req, res) => {
             return res.status(404).json({ error: 'Workspace not found' });
         }
 
-        if (workspaceRows[0].owner_id !== String(userId)) {
+        const { rows: requesterRows } = await client.query(
+            'SELECT role FROM users WHERE id = $1 LIMIT 1',
+            [String(userId)]
+        );
+
+        if (requesterRows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const isGlobalAdmin = requesterRows[0].role === 'admin';
+
+        if (!isGlobalAdmin && workspaceRows[0].owner_id !== String(userId)) {
             return res.status(403).json({ error: 'Only workspace owner can delete this workspace' });
         }
 
@@ -556,6 +587,19 @@ app.put('/api/workspaces/:id/members/:memberId/permissions', async (req, res) =>
 
         await client.query('BEGIN');
 
+        const { rows: requesterUserRows } = await client.query(
+            'SELECT role FROM users WHERE id = $1 LIMIT 1',
+            [String(requesterUserId)]
+        );
+
+        if (requesterUserRows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Requester user not found' });
+        }
+
+        const requesterUserRole = requesterUserRows[0].role;
+        const isGlobalAdmin = requesterUserRole === 'admin';
+
         const { rows: requesterRows } = await client.query(
             `SELECT role, can_manage_permissions
              FROM workspace_members
@@ -564,13 +608,15 @@ app.put('/api/workspaces/:id/members/:memberId/permissions', async (req, res) =>
             [workspaceId, String(requesterUserId)]
         );
 
-        if (requesterRows.length === 0) {
+        if (!isGlobalAdmin && requesterRows.length === 0) {
             await client.query('ROLLBACK');
             return res.status(403).json({ error: 'Requester is not a workspace member' });
         }
 
         const requester = requesterRows[0];
-        const canManage = requester.role === 'owner' || requester.can_manage_permissions === true;
+        const canManage =
+            isGlobalAdmin ||
+            (requester && (requester.role === 'owner' || requester.can_manage_permissions === true));
         if (!canManage) {
             await client.query('ROLLBACK');
             return res.status(403).json({ error: 'No permission to manage member permissions' });

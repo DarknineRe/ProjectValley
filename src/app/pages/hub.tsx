@@ -4,15 +4,6 @@ import { useAuth } from "../context/auth-context";
 import { useWorkspace } from "../context/workspace-context";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "../components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Leaf, Plus, LogOut, Users, Code, ChevronRight, Building2, Trash2 } from "lucide-react";
+import { Leaf, LogOut, Users, Code, ChevronRight, Building2, Trash2 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
@@ -33,71 +24,27 @@ export function Hub() {
   const { user, logout } = useAuth();
   const {
     workspaces,
-    createWorkspace,
-    joinWorkspace,
     deleteWorkspace,
     setCurrentWorkspace,
   } =
     useWorkspace();
   const navigate = useNavigate();
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
-  const [newWorkspaceName, setNewWorkspaceName] = useState("");
-  const [joinCode, setJoinCode] = useState("");
   const [workspaceToDelete, setWorkspaceToDelete] = useState<Workspace | null>(null);
   const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
+  const isAdmin = user?.role === "admin";
+  const visibleWorkspaces = isAdmin ? workspaces : workspaces.slice(0, 1);
 
-  // Redirect if not authenticated or not admin
+  // Redirect if not authenticated
   useEffect(() => {
     if (!user) {
       navigate("/login");
       return;
-    }
-    
-    // Check if user is admin (owner of at least one workspace)
-    const isAdmin = workspaces.some((ws) => ws.ownerId === user.id);
-    
-    // If not admin, redirect to workspace marketplace
-    if (workspaces.length > 0 && !isAdmin) {
-      navigate("/workspace/marketplace");
     }
   }, [user, navigate, workspaces]);
 
   if (!user) {
     return null;
   }
-
-  const handleCreateWorkspace = async () => {
-    if (!newWorkspaceName.trim()) {
-      toast.error("กรุณาใส่ชื่อ Workspace");
-      return;
-    }
-    try {
-      await createWorkspace(newWorkspaceName.trim());
-      setIsCreateDialogOpen(false);
-      setNewWorkspaceName("");
-      toast.success("สร้าง Workspace สำเร็จ!");
-      navigate("/workspace/marketplace");
-    } catch (error) {
-      toast.error("ไม่สามารถสร้าง Workspace ได้");
-    }
-  };
-
-  const handleJoinWorkspace = async () => {
-    if (!joinCode.trim()) {
-      toast.error("กรุณาใส่รหัส Workspace");
-      return;
-    }
-    const success = await joinWorkspace(joinCode);
-    if (success) {
-      setIsJoinDialogOpen(false);
-      setJoinCode("");
-      toast.success("เข้าร่วม Workspace สำเร็จ!");
-      navigate("/workspace/marketplace");
-    } else {
-      toast.error("ไม่พบ Workspace ที่ใช้รหัสนี้");
-    }
-  };
 
   const handleSelectWorkspace = (workspace: Workspace) => {
     setCurrentWorkspace(workspace);
@@ -198,61 +145,20 @@ export function Hub() {
               เลือก Workspace ของคุณ
             </h2>
             <p className="text-gray-600">
-              หรือสร้าง Workspace ใหม่เพื่อเริ่มต้นจัดการสต็อก
+              {isAdmin
+                ? "ผู้ดูแลสามารถเข้าได้ทุก Workspace"
+                : "บัญชีนี้สามารถเข้าใช้งานได้เฉพาะ Workspace ของตนเอง"}
             </p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-            <Card
-              className="p-6 cursor-pointer hover:shadow-lg transition-shadow border-2 border-green-200 hover:border-green-400"
-              onClick={() => setIsCreateDialogOpen(true)}
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-green-100 rounded-full">
-                  <Plus className="h-6 w-6 text-green-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg text-gray-900">
-                    สร้าง Workspace ใหม่
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    เริ่มต้นจัดการสต็อกของคุณเอง
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-400" />
-              </div>
-            </Card>
-
-            <Card
-              className="p-6 cursor-pointer hover:shadow-lg transition-shadow border-2 border-blue-200 hover:border-blue-400"
-              onClick={() => setIsJoinDialogOpen(true)}
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-100 rounded-full">
-                  <Code className="h-6 w-6 text-blue-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg text-gray-900">
-                    เข้าร่วม Workspace
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    ใช้รหัสเพื่อเข้าร่วม Workspace
-                  </p>
-                </div>
-                <ChevronRight className="h-5 w-5 text-gray-400" />
-              </div>
-            </Card>
-          </div>
-
           {/* Workspace List */}
-          {workspaces.length > 0 && (
+          {visibleWorkspaces.length > 0 && (
             <div>
               <h3 className="text-xl font-semibold text-gray-900 mb-4">
                 Workspace ของคุณ
               </h3>
               <div className="grid grid-cols-1 gap-4">
-                {workspaces.map((workspace) => {
+                {visibleWorkspaces.map((workspace) => {
                   const isOwner = workspace.ownerId === user?.id;
                   return (
                     <Card
@@ -314,103 +220,19 @@ export function Hub() {
             </div>
           )}
 
-          {workspaces.length === 0 && (
+          {visibleWorkspaces.length === 0 && (
             <Card className="p-12 text-center">
               <Building2 className="h-16 w-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
                 ยังไม่มี Workspace
               </h3>
               <p className="text-gray-600 mb-6">
-                สร้าง Workspace ใหม่หรือเข้าร่วม Workspace ที่มีอยู่
+                ยังไม่มี Workspace ที่ผูกกับบัญชีนี้
               </p>
             </Card>
           )}
         </div>
       </div>
-
-      {/* Create Workspace Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>สร้าง Workspace ใหม่</DialogTitle>
-            <DialogDescription>
-              ตั้งชื่อให้กับ Workspace ของคุณ
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label htmlFor="workspace-name">ชื่อ Workspace</Label>
-              <Input
-                id="workspace-name"
-                placeholder="เช่น สวนผักครอบครัว"
-                value={newWorkspaceName}
-                onChange={(e) => setNewWorkspaceName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleCreateWorkspace()}
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsCreateDialogOpen(false);
-                  setNewWorkspaceName("");
-                }}
-              >
-                ยกเลิก
-              </Button>
-              <Button
-                onClick={handleCreateWorkspace}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                สร้าง Workspace
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Join Workspace Dialog */}
-      <Dialog open={isJoinDialogOpen} onOpenChange={setIsJoinDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>เข้าร่วม Workspace</DialogTitle>
-            <DialogDescription>
-              ใส่รหัส 6 หลักเพื่อเข้าร่วม Workspace
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label htmlFor="join-code">รหัส Workspace</Label>
-              <Input
-                id="join-code"
-                placeholder="ABC123"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === "Enter" && handleJoinWorkspace()}
-                maxLength={6}
-                className="font-mono text-lg text-center"
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsJoinDialogOpen(false);
-                  setJoinCode("");
-                }}
-              >
-                ยกเลิก
-              </Button>
-              <Button
-                onClick={handleJoinWorkspace}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                เข้าร่วม
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog
         open={!!workspaceToDelete}
