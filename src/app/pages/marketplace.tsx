@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useData } from "../context/data-context";
 import { useAuth } from "../context/auth-context";
 import { useWorkspace } from "../context/workspace-context";
@@ -9,6 +9,8 @@ import { Button } from "../components/ui/button";
 import { Search, Store, Package2, Users, Filter, Sparkles, Edit, Trash2 } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { EditProductDialog } from "../components/edit-product-dialog";
+import { toast } from "sonner";
+import { API_BASE } from "../../api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,14 +22,70 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 
+export interface Product {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  imageUrl?: string;
+  sellerId: string;
+  sellerName: string;
+  minStock: number;
+  harvestDate?: Date;
+  lastUpdated: Date;
+  workspace_id?: string;
+  workspace_name?: string;
+}
+
 export function Marketplace() {
-  const { products, deleteProduct } = useData();
   const { user } = useAuth();
-  const { currentWorkspace, isGlobalAdmin, getUserRole, getUserPermissions } = useWorkspace();
+  const { isGlobalAdmin, getUserRole, getUserPermissions } = useWorkspace();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ทั้งหมด");
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+
+  // Fetch all products from all workspaces
+  useEffect(() => {
+    const loadAllProducts = async () => {
+      try {
+        setIsLoading(true);
+        const res = await fetch(`${API_BASE}/api/admin/all-products`);
+        if (res.ok) {
+          const data = await res.json();
+          setProducts(data.map((p: any) => ({
+            id: p.id,
+            name: p.name ?? p.product_name ?? p.productName ?? '',
+            category: p.category,
+            quantity: p.quantity,
+            unit: p.unit,
+            price: Number(p.price ?? 0),
+            imageUrl: p.image_url ?? p.imageUrl,
+            sellerId: p.seller_id ?? p.sellerId ?? 'legacy',
+            sellerName: p.seller_name ?? p.sellerName ?? 'ไม่ระบุผู้ขาย',
+            minStock: p.minstock ?? p.minStock ?? 0,
+            harvestDate: p.harvestdate ? new Date(p.harvestdate) : p.harvestDate ? new Date(p.harvestDate) : undefined,
+            lastUpdated: p.lastupdated ? new Date(p.lastupdated) : p.lastUpdated ? new Date(p.lastUpdated) : new Date(),
+            workspace_id: p.workspace_id,
+            workspace_name: p.workspace_name
+          })));
+        } else {
+          toast.error('ไม่สามารถโหลดข้อมูลสินค้าทั้งหมด');
+        }
+      } catch (error) {
+        console.error('Error loading marketplace products:', error);
+        toast.error('เกิดข้อผิดพลาดในการโหลดข้อมูล');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadAllProducts();
+  }, []);
 
   const userRole = getUserRole();
   const permissions = getUserPermissions();
@@ -76,8 +134,20 @@ export function Marketplace() {
 
   const handleDeleteProduct = async () => {
     if (!deletingProductId) return;
-    await deleteProduct(deletingProductId);
-    setDeletingProductId(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/products/${deletingProductId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setProducts(prev => prev.filter(p => p.id !== deletingProductId));
+        toast.success('ลบสินค้าสำเร็จ');
+        setDeletingProductId(null);
+      } else {
+        toast.error('ไม่สามารถลบสินค้า');
+      }
+    } catch (error) {
+      toast.error('เกิดข้อผิดพลาดในการลบสินค้า');
+    }
   };
 
   return (
@@ -87,12 +157,9 @@ export function Marketplace() {
         <div className="absolute bottom-0 left-0 h-24 w-full bg-gradient-to-t from-black/25 to-transparent" />
         <div className="relative">
           <p className="mb-2 text-xs uppercase tracking-[0.3em] text-emerald-200">Welcome To Marketplace</p>
-          <h2 className="text-3xl font-bold md:text-4xl">Discover Our Latest Collection</h2>
+          <h2 className="text-3xl font-bold md:text-4xl">ดูรายการสินค้าทั้งหมด</h2>
           <p className="mt-2 max-w-2xl text-sm text-neutral-200 md:text-base">
-            ตลาดกลางสไตล์โชว์เคสสินค้า เน้นดูรายการและเทียบข้อเสนอแบบไม่มีตะกร้า โดยผู้ดูแลยังแก้ไขสินค้าได้ตามปกติ
-          </p>
-          <p className="mt-2 text-xs text-emerald-200">
-            Workspace ปัจจุบัน: {currentWorkspace?.name || "-"}
+            ตลาดกลางสไตล์โชว์เคสสินค้า แสดงรายการทั้งหมดจากทุก Workspace โดยผู้ดูแลสามารถแก้ไขและลบสินค้าได้
           </p>
           <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/40 bg-emerald-200/10 px-4 py-2 text-sm text-emerald-100">
             <Sparkles className="h-4 w-4" />

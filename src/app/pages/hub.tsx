@@ -52,14 +52,6 @@ export function Hub() {
     navigate(isAdmin ? "/workspace/marketplace" : "/workspace/inventory");
   };
 
-  const handleOpenMarketplace = () => {
-    // Set to first workspace before navigating to marketplace
-    if (workspaces.length > 0) {
-      setCurrentWorkspace(workspaces[0]);
-    }
-    navigate("/workspace/marketplace");
-  };
-
   const handleDeleteWorkspace = async () => {
     if (!workspaceToDelete) return;
     setIsDeletingWorkspace(true);
@@ -166,7 +158,7 @@ export function Hub() {
           {isAdmin && (
             <Card
               className="p-6 mb-6 cursor-pointer hover:shadow-lg transition-shadow border-2 border-emerald-200 hover:border-emerald-400"
-              onClick={handleOpenMarketplace}
+              onClick={() => navigate("/workspace/marketplace")}
             >
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-emerald-100 rounded-full">

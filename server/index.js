@@ -1305,6 +1305,27 @@ app.get('/api/public/products', async (req, res) => {
     }
 });
 
+// Admin endpoint: fetch all products from all workspaces
+app.get('/api/admin/all-products', async (req, res) => {
+    try {
+        const user = req.user;
+        if (!user || !isGlobalAdminUser(user)) {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+        const { rows } = await pool.query(`
+            SELECT
+                p.*,
+                w.name AS workspace_name
+            FROM products p
+            LEFT JOIN workspaces w ON w.id = p.workspace_id
+            ORDER BY COALESCE(w.name, 'ทั่วไป') ASC, p.lastUpdated DESC
+        `);
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/api/products', async (req, res) => {
     try {
         const workspaceId = requireWorkspaceId(req, res);
