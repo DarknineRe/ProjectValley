@@ -66,6 +66,9 @@ export function Layout() {
       navigate("/login");
     } else if (!isLoading && !currentWorkspace) {
       navigate("/hub");
+    } else if (location.pathname === "/workspace/marketplace") {
+      // Allow marketplace access for admins
+      return;
     } else if (accessibleNavItems.length > 0) {
       const canAccessCurrent = accessibleNavItems.some(
         (item) => item.path === location.pathname

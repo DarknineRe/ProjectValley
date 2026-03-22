@@ -54,9 +54,12 @@ export function Marketplace() {
     const loadAllProducts = async () => {
       try {
         setIsLoading(true);
+        console.log(`Loading products from: ${API_BASE}/api/admin/all-products`);
         const res = await fetch(`${API_BASE}/api/admin/all-products`);
+        console.log(`Response status: ${res.status}`);
         if (res.ok) {
           const data = await res.json();
+          console.log(`Loaded ${data.length} products`);
           setProducts(data.map((p: any) => ({
             id: p.id,
             name: p.name ?? p.product_name ?? p.productName ?? '',
@@ -74,7 +77,9 @@ export function Marketplace() {
             workspace_name: p.workspace_name
           })));
         } else {
-          toast.error('ไม่สามารถโหลดข้อมูลสินค้าทั้งหมด');
+          const errorText = await res.text();
+          console.error(`Error loading products: ${res.status} ${errorText}`);
+          toast.error(`ไม่สามารถโหลดข้อมูลสินค้า (${res.status})`);
         }
       } catch (error) {
         console.error('Error loading marketplace products:', error);
@@ -149,6 +154,21 @@ export function Marketplace() {
       toast.error('เกิดข้อผิดพลาดในการลบสินค้า');
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-8">
+        <section className="relative overflow-hidden rounded-3xl border border-emerald-800 bg-[radial-gradient(circle_at_top_right,_#166534_0%,_#064e3b_45%,_#052e16_100%)] px-6 py-10 text-white shadow-xl md:px-10">
+          <div className="absolute -top-16 -right-8 h-48 w-48 rounded-full bg-emerald-300/10 blur-2xl" />
+          <div className="relative">
+            <p className="mb-2 text-xs uppercase tracking-[0.3em] text-emerald-200">กำลังโหลด...</p>
+            <h2 className="text-3xl font-bold md:text-4xl">ตลาดกลาง</h2>
+            <p className="mt-2 text-neutral-200">กำลังโหลดข้อมูลสินค้าจากทั้งระบบ กรุณารอสักครู่...</p>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
