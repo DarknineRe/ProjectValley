@@ -79,7 +79,7 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const { currentWorkspace, getUserRole, getUserPermissions } = useWorkspace();
+  const { currentWorkspace, isGlobalAdmin, getUserRole, getUserPermissions } = useWorkspace();
   const [products, setProducts] = useState<Product[]>([]);
   const [schedules, setSchedules] = useState<PlantingSchedule[]>([]);
   const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
@@ -139,6 +139,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   });
 
   const canModifyProduct = (product: Product) => {
+    if (isGlobalAdmin) {
+      return true;
+    }
+
     if (getUserRole() === "owner") {
       return true;
     }

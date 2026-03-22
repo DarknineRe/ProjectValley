@@ -1,12 +1,24 @@
 import { useMemo, useState } from "react";
 import { useData } from "../context/data-context";
 import { useAuth } from "../context/auth-context";
+import { useWorkspace } from "../context/workspace-context";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Search, Store, Package2, Users, Layers3, Filter } from "lucide-react";
+import { Search, Store, Package2, Users, Layers3, Filter, Edit, Trash2 } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
+import { EditProductDialog } from "../components/edit-product-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 
 function normalizeMarketplaceName(name: string) {
   return String(name || "")
@@ -16,10 +28,19 @@ function normalizeMarketplaceName(name: string) {
 }
 
 export function Marketplace() {
-  const { products } = useData();
+  const { products, deleteProduct } = useData();
   const { user } = useAuth();
+  const { isGlobalAdmin, getUserRole, getUserPermissions } = useWorkspace();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ทั้งหมด");
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+
+  const userRole = getUserRole();
+  const permissions = getUserPermissions();
+  const canManageProducts = permissions.canEdit;
+  const selectedEditingProduct =
+    editingProductId ? products.find((product) => product.id === editingProductId) || null : null;
 
   const categories = useMemo(
     () => ["ทั้งหมด", ...new Set(products.map((product) => product.category))],
@@ -101,13 +122,25 @@ export function Marketplace() {
     };
   }, [categories.length, products]);
 
+  const canManageOffer = (sellerId: string) => {
+    if (!canManageProducts) return false;
+    if (isGlobalAdmin || userRole === "owner") return true;
+    return sellerId === user?.id;
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!deletingProductId) return;
+    await deleteProduct(deletingProductId);
+    setDeletingProductId(null);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">ตลาดกลางสินค้าเกษตร</h2>
           <p className="mt-1 text-gray-600">
-            ผู้ค้าลงสินค้าและตั้งราคาเองได้ ผู้ซื้อดูสินค้าแบบจัดกลุ่มตามหมวดหมู่และชื่อที่ใกล้กัน พร้อมเห็นว่าเป็นของใคร
+            แสดงสินค้าแบบหน้าผู้ซื้อเพื่อเปรียบเทียบข้อเสนอได้ง่าย ไม่มีระบบตะกร้า และให้ผู้ดูแลแก้ไขสินค้าได้ทันที
           </p>
         </div>
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
@@ -250,6 +283,29 @@ export function Marketplace() {
                             <div className="text-right">
                               <p className="text-lg font-semibold text-gray-900">฿{offer.price.toFixed(2)}</p>
                               <p className="text-sm text-gray-500">ต่อ {offer.unit}</p>
+                              {canManageOffer(offer.sellerId) && (
+                                <div className="mt-2 flex items-center justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setEditingProductId(offer.id)}
+                                  >
+                                    <Edit className="mr-1 h-3.5 w-3.5" />
+                                    แก้ไข
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-red-600 hover:text-red-700"
+                                    onClick={() => setDeletingProductId(offer.id)}
+                                  >
+                                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                    ลบ
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -262,6 +318,42 @@ export function Marketplace() {
           </div>
         ))
       )}
+
+      {selectedEditingProduct && (
+        <EditProductDialog
+          product={selectedEditingProduct}
+          open={!!selectedEditingProduct}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditingProductId(null);
+            }
+          }}
+        />
+      )}
+
+      <AlertDialog
+        open={!!deletingProductId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingProductId(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>ยืนยันการลบสินค้า</AlertDialogTitle>
+            <AlertDialogDescription>
+              ต้องการลบรายการสินค้านี้ออกจากตลาดกลางใช่หรือไม่?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={handleDeleteProduct}>
+              ลบสินค้า
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
