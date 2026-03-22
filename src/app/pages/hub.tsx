@@ -31,7 +31,8 @@ export function Hub() {
   const navigate = useNavigate();
   const [workspaceToDelete, setWorkspaceToDelete] = useState<Workspace | null>(null);
   const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
-  const isAdmin = user?.role === "admin";
+  const isAdmin =
+    user?.role === "admin" || user?.email?.toLowerCase() === "admin@example.com";
   const visibleWorkspaces = isAdmin ? workspaces : workspaces.slice(0, 1);
 
   // Redirect if not authenticated

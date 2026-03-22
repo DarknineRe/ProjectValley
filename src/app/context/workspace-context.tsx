@@ -73,6 +73,8 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const isGlobalAdmin =
+    user?.role === "admin" || user?.email?.toLowerCase() === "admin@example.com";
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentWorkspace, setCurrentWorkspaceState] = useState<Workspace | null>(null);
@@ -171,7 +173,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         setWorkspaces(fetchedWorkspaces);
 
         const storedWorkspaceId = localStorage.getItem(getCurrentWorkspaceKey(user.id));
-        const isAdmin = user.role === "admin";
+        const isAdmin = isGlobalAdmin;
         const matched = storedWorkspaceId
           ? fetchedWorkspaces.find((ws) => ws.id === storedWorkspaceId)
           : null;
@@ -202,7 +204,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => {
       isCancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.id, isGlobalAdmin]);
 
   const setCurrentWorkspace = (workspace: Workspace | null) => {
     if (!user?.id) {
@@ -210,7 +212,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const isAdmin = user.role === "admin";
+    const isAdmin = isGlobalAdmin;
     if (isAdmin) {
       setCurrentWorkspaceState(workspace);
       return;
@@ -336,7 +338,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const getUserRole = (): "owner" | "employee" | null => {
     if (!user || !currentWorkspace) return null;
-    if (user.role === "admin") return "owner";
+    if (isGlobalAdmin) return "owner";
     const member = currentWorkspace.members.find((m) => m.id === user.id);
     return member?.role || null;
   };
@@ -360,7 +362,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    if (user.role === "admin") {
+    if (isGlobalAdmin) {
       return {
         canView: true,
         canAdd: true,

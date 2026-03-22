@@ -6,6 +6,20 @@ const { fetchMarketPrice, fetchProductCatalog } = require('./market-price-servic
 const app = express();
 const port = 3001;
 
+const SYSTEM_ADMIN_EMAILS = new Set(
+    String(process.env.SYSTEM_ADMIN_EMAILS || 'admin@example.com')
+        .split(',')
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean)
+);
+
+function isGlobalAdminUser(user) {
+    if (!user) return false;
+    const role = String(user.role || '').toLowerCase();
+    const email = String(user.email || '').toLowerCase();
+    return role === 'admin' || SYSTEM_ADMIN_EMAILS.has(email);
+}
+
 const OTP_EXPIRE_MS = 5 * 60 * 1000;
 const loginOtpStore = new Map();
 const registerOtpStore = new Map();
@@ -234,7 +248,7 @@ app.get('/api/workspaces', async (req, res) => {
         }
 
         const { rows: requesterRows } = await pool.query(
-            'SELECT id, role FROM users WHERE id = $1 LIMIT 1',
+            'SELECT id, role, email FROM users WHERE id = $1 LIMIT 1',
             [String(userId)]
         );
 
@@ -243,7 +257,7 @@ app.get('/api/workspaces', async (req, res) => {
         }
 
         const requester = requesterRows[0];
-        const isGlobalAdmin = requester.role === 'admin';
+        const isGlobalAdmin = isGlobalAdminUser(requester);
 
         const baseSelect = `
             SELECT
@@ -574,7 +588,7 @@ app.delete('/api/workspaces/:id', async (req, res) => {
         }
 
         const { rows: requesterRows } = await client.query(
-            'SELECT role FROM users WHERE id = $1 LIMIT 1',
+            'SELECT role, email FROM users WHERE id = $1 LIMIT 1',
             [String(userId)]
         );
 
@@ -582,7 +596,7 @@ app.delete('/api/workspaces/:id', async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const isGlobalAdmin = requesterRows[0].role === 'admin';
+        const isGlobalAdmin = isGlobalAdminUser(requesterRows[0]);
 
         if (!isGlobalAdmin && workspaceRows[0].owner_id !== String(userId)) {
             return res.status(403).json({ error: 'Only workspace owner can delete this workspace' });
@@ -640,7 +654,7 @@ app.put('/api/workspaces/:id/members/:memberId/permissions', async (req, res) =>
         await client.query('BEGIN');
 
         const { rows: requesterUserRows } = await client.query(
-            'SELECT role FROM users WHERE id = $1 LIMIT 1',
+            'SELECT role, email FROM users WHERE id = $1 LIMIT 1',
             [String(requesterUserId)]
         );
 
@@ -649,8 +663,7 @@ app.put('/api/workspaces/:id/members/:memberId/permissions', async (req, res) =>
             return res.status(404).json({ error: 'Requester user not found' });
         }
 
-        const requesterUserRole = requesterUserRows[0].role;
-        const isGlobalAdmin = requesterUserRole === 'admin';
+        const isGlobalAdmin = isGlobalAdminUser(requesterUserRows[0]);
 
         const { rows: requesterRows } = await client.query(
             `SELECT role, can_manage_permissions
@@ -789,7 +802,7 @@ app.post('/api/workspaces/:id/guest-accounts', async (req, res) => {
         await client.query('BEGIN');
 
         const { rows: creatorRows } = await client.query(
-            'SELECT role FROM users WHERE id = $1 LIMIT 1',
+            'SELECT role, email FROM users WHERE id = $1 LIMIT 1',
             [String(creatorUserId)]
         );
 
@@ -798,7 +811,7 @@ app.post('/api/workspaces/:id/guest-accounts', async (req, res) => {
             return res.status(404).json({ error: 'Creator user not found' });
         }
 
-        const creatorIsGlobalAdmin = creatorRows[0].role === 'admin';
+        const creatorIsGlobalAdmin = isGlobalAdminUser(creatorRows[0]);
 
         const { rows: workspaceRows } = await client.query(
             'SELECT id, owner_id FROM workspaces WHERE id = $1 LIMIT 1',
@@ -1201,7 +1214,7 @@ app.post('/api/auth/google', async (req, res) => {
             user = existingUsers[0];
 
             // Backfill workspace for legacy accounts that existed before auto-workspace logic.
-            if (user.role !== 'admin') {
+            if (!isGlobalAdminUser(user)) {
                 const client = await pool.connect();
                 try {
                     await client.query('BEGIN');
