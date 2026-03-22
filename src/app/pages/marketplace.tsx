@@ -6,7 +6,7 @@ import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Search, Store, Package2, Users, Layers3, Filter, Edit, Trash2 } from "lucide-react";
+import { Search, Store, Package2, Users, Filter, Sparkles, Edit, Trash2 } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { EditProductDialog } from "../components/edit-product-dialog";
 import {
@@ -20,13 +20,6 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 
-function normalizeMarketplaceName(name: string) {
-  return String(name || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
-
 export function Marketplace() {
   const { products, deleteProduct } = useData();
   const { user } = useAuth();
@@ -38,7 +31,6 @@ export function Marketplace() {
 
   const userRole = getUserRole();
   const permissions = getUserPermissions();
-  const canManageProducts = permissions.canEdit;
   const selectedEditingProduct =
     editingProductId ? products.find((product) => product.id === editingProductId) || null : null;
 
@@ -50,80 +42,34 @@ export function Marketplace() {
   const visibleProducts = useMemo(() => {
     return products
       .filter((product) => {
+        const q = search.toLowerCase();
         const matchesSearch =
-          product.name.toLowerCase().includes(search.toLowerCase()) ||
-          product.category.toLowerCase().includes(search.toLowerCase()) ||
-          product.sellerName.toLowerCase().includes(search.toLowerCase());
+          product.name.toLowerCase().includes(q) ||
+          product.category.toLowerCase().includes(q) ||
+          product.sellerName.toLowerCase().includes(q);
         const matchesCategory =
           categoryFilter === "ทั้งหมด" || product.category === categoryFilter;
-
         return matchesSearch && matchesCategory;
       })
       .sort((left, right) => {
-        if (left.category !== right.category) {
-          return left.category.localeCompare(right.category, "th");
-        }
-        const leftName = normalizeMarketplaceName(left.name);
-        const rightName = normalizeMarketplaceName(right.name);
-        if (leftName !== rightName) {
-          return leftName.localeCompare(rightName, "th");
-        }
-        return left.price - right.price;
+        if (left.price !== right.price) return left.price - right.price;
+        return left.name.localeCompare(right.name, "th");
       });
   }, [categoryFilter, products, search]);
 
-  const groupedByCategory = useMemo(() => {
-    const categoryMap = new Map<
-      string,
-      Array<{
-        groupKey: string;
-        displayName: string;
-        offers: typeof visibleProducts;
-      }>
-    >();
-
-    for (const product of visibleProducts) {
-      const categoryGroups = categoryMap.get(product.category) || [];
-      const groupKey = normalizeMarketplaceName(product.name);
-      const existingGroup = categoryGroups.find((group) => group.groupKey === groupKey);
-
-      if (existingGroup) {
-        existingGroup.offers.push(product);
-        continue;
-      }
-
-      categoryGroups.push({
-        groupKey,
-        displayName: product.name,
-        offers: [product],
-      });
-      categoryMap.set(product.category, categoryGroups);
-    }
-
-    return Array.from(categoryMap.entries()).map(([category, groups]) => ({
-      category,
-      groups: groups
-        .map((group) => ({
-          ...group,
-          offers: [...group.offers].sort((left, right) => left.price - right.price),
-        }))
-        .sort((left, right) => left.displayName.localeCompare(right.displayName, "th")),
-    }));
-  }, [visibleProducts]);
+  const featuredOffers = useMemo(() => visibleProducts.slice(0, 3), [visibleProducts]);
 
   const summary = useMemo(() => {
     const sellerCount = new Set(products.map((product) => product.sellerId)).size;
-    const groupedProductCount = new Set(products.map((product) => normalizeMarketplaceName(product.name))).size;
     return {
       offers: products.length,
       sellers: sellerCount,
-      groups: groupedProductCount,
       categories: categories.length - 1,
     };
   }, [categories.length, products]);
 
   const canManageOffer = (sellerId: string) => {
-    if (!canManageProducts) return false;
+    if (!permissions.canEdit) return false;
     if (isGlobalAdmin || userRole === "owner") return true;
     return sellerId === user?.id;
   };
@@ -135,66 +81,61 @@ export function Marketplace() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">ตลาดกลางสินค้าเกษตร</h2>
-          <p className="mt-1 text-gray-600">
-            แสดงสินค้าแบบหน้าผู้ซื้อเพื่อเปรียบเทียบข้อเสนอได้ง่าย ไม่มีระบบตะกร้า และให้ผู้ดูแลแก้ไขสินค้าได้ทันที
+    <div className="space-y-8">
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-800 bg-[radial-gradient(circle_at_top_right,_#166534_0%,_#064e3b_45%,_#052e16_100%)] px-6 py-10 text-white shadow-xl md:px-10">
+        <div className="absolute -top-16 -right-8 h-48 w-48 rounded-full bg-emerald-300/10 blur-2xl" />
+        <div className="absolute bottom-0 left-0 h-24 w-full bg-gradient-to-t from-black/25 to-transparent" />
+        <div className="relative">
+          <p className="mb-2 text-xs uppercase tracking-[0.3em] text-emerald-200">Welcome To Marketplace</p>
+          <h2 className="text-3xl font-bold md:text-4xl">Discover Our Latest Collection</h2>
+          <p className="mt-2 max-w-2xl text-sm text-neutral-200 md:text-base">
+            ตลาดกลางสไตล์โชว์เคสสินค้า เน้นดูรายการและเทียบข้อเสนอแบบไม่มีตะกร้า โดยผู้ดูแลยังแก้ไขสินค้าได้ตามปกติ
           </p>
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/40 bg-emerald-200/10 px-4 py-2 text-sm text-emerald-100">
+            <Sparkles className="h-4 w-4" />
+            {user ? `กำลังดูในชื่อ ${user.name}` : "เข้าสู่ระบบเพื่อดูข้อมูลตลาดกลาง"}
+          </div>
         </div>
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          {user ? `กำลังดูในชื่อ ${user.name}` : "เข้าสู่ระบบเพื่อดูข้อมูลตลาดกลาง"}
-        </div>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="p-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="border-neutral-200 p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">ข้อเสนอขายทั้งหมด</p>
+              <p className="text-sm text-gray-600">รายการสินค้าทั้งหมด</p>
               <p className="text-3xl font-bold text-gray-900">{summary.offers}</p>
             </div>
-            <Store className="h-6 w-6 text-emerald-600" />
+            <Store className="h-6 w-6 text-emerald-700" />
           </div>
         </Card>
-        <Card className="p-5">
+        <Card className="border-neutral-200 p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">ผู้ค้าทั้งหมด</p>
+              <p className="text-sm text-gray-600">ผู้ขายทั้งหมด</p>
               <p className="text-3xl font-bold text-gray-900">{summary.sellers}</p>
             </div>
-            <Users className="h-6 w-6 text-blue-600" />
+            <Users className="h-6 w-6 text-emerald-700" />
           </div>
         </Card>
-        <Card className="p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">กลุ่มชื่อสินค้า</p>
-              <p className="text-3xl font-bold text-gray-900">{summary.groups}</p>
-            </div>
-            <Layers3 className="h-6 w-6 text-amber-600" />
-          </div>
-        </Card>
-        <Card className="p-5">
+        <Card className="border-neutral-200 p-5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">หมวดหมู่</p>
               <p className="text-3xl font-bold text-gray-900">{summary.categories}</p>
             </div>
-            <Package2 className="h-6 w-6 text-violet-600" />
+            <Package2 className="h-6 w-6 text-emerald-700" />
           </div>
         </Card>
       </div>
 
-      <Card className="p-6">
+      <Card className="border-neutral-200 p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="ค้นหาตามชื่อสินค้า หมวดหมู่ หรือชื่อผู้ค้า"
+              placeholder="ค้นหาตามชื่อสินค้า หมวดหมู่ หรือชื่อผู้ขาย"
               className="pl-10"
             />
           </div>
@@ -218,105 +159,87 @@ export function Marketplace() {
         </div>
       </Card>
 
-      {groupedByCategory.length === 0 ? (
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-xl font-semibold text-gray-900">Limited Time Offers</h3>
+          <Badge className="bg-emerald-600 hover:bg-emerald-600">Top 3 ราคาดีสุด</Badge>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {featuredOffers.map((offer) => (
+            <Card key={`featured-${offer.id}`} className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4">
+              <p className="text-sm font-medium text-emerald-800">{offer.name}</p>
+              <p className="mt-2 text-2xl font-bold text-gray-900">฿{offer.price.toFixed(2)}</p>
+              <p className="text-xs text-gray-500 line-through">฿{(offer.price * 1.25).toFixed(2)}</p>
+              <p className="mt-2 text-xs text-gray-600">โดย {offer.sellerName}</p>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {visibleProducts.length === 0 ? (
         <Card className="p-10 text-center text-gray-500">ยังไม่มีสินค้าที่ตรงกับเงื่อนไขที่ค้นหา</Card>
       ) : (
-        groupedByCategory.map(({ category, groups }) => (
-          <div key={category} className="space-y-4">
-            <div className="flex items-center gap-3">
-              <h3 className="text-xl font-semibold text-gray-900">{category}</h3>
-              <Badge variant="outline">{groups.length} กลุ่มสินค้า</Badge>
-            </div>
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {visibleProducts.map((offer) => (
+            <Card key={offer.id} className="overflow-hidden border-neutral-200 p-0 shadow-sm">
+              <div className="h-48 w-full bg-neutral-100">
+                {offer.imageUrl ? (
+                  <ImageWithFallback
+                    src={offer.imageUrl}
+                    alt={offer.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-neutral-400">
+                    <Package2 className="h-10 w-10" />
+                  </div>
+                )}
+              </div>
 
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              {groups.map((group) => {
-                const bestOffer = group.offers[0];
-                return (
-                  <Card key={`${category}-${group.groupKey}`} className="border-emerald-100 p-5 shadow-sm">
-                    <div className="mb-4 flex items-start justify-between gap-4">
-                      <div>
-                        <h4 className="text-lg font-semibold text-gray-900">{group.displayName}</h4>
-                        <p className="text-sm text-gray-600">
-                          จัดเรียงตามราคาต่ำสุดก่อน เพื่อให้ผู้ซื้อเทียบข้อเสนอของสินค้าชื่อเดียวกันได้ทันที
-                        </p>
-                      </div>
-                      <div className="rounded-xl bg-emerald-50 px-3 py-2 text-right">
-                        <p className="text-xs text-emerald-700">เริ่มต้นที่</p>
-                        <p className="text-lg font-bold text-emerald-800">฿{bestOffer.price.toFixed(2)}</p>
-                      </div>
-                    </div>
+              <div className="space-y-3 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-lg font-semibold text-gray-900">{offer.name}</h4>
+                    <p className="text-sm text-gray-600">{offer.category}</p>
+                  </div>
+                  <Badge variant="outline">{offer.unit}</Badge>
+                </div>
 
-                    <div className="space-y-3">
-                      {group.offers.map((offer) => (
-                        <div
-                          key={offer.id}
-                          className="rounded-2xl border border-gray-200 bg-white px-4 py-3"
-                        >
-                          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="h-20 w-20 overflow-hidden rounded-2xl bg-emerald-50">
-                                {offer.imageUrl ? (
-                                  <ImageWithFallback
-                                    src={offer.imageUrl}
-                                    alt={offer.name}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-emerald-600">
-                                    <Package2 className="h-8 w-8 opacity-60" />
-                                  </div>
-                                )}
-                              </div>
-                              <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-gray-900">{offer.sellerName}</p>
-                                {offer.sellerId === user?.id && (
-                                  <Badge variant="secondary">สินค้าของฉัน</Badge>
-                                )}
-                              </div>
-                              <p className="text-sm text-gray-600">
-                                คงเหลือ {offer.quantity.toLocaleString()} {offer.unit}
-                                {offer.minStock > 0 ? ` • แจ้งเตือนเมื่อเหลือ ${offer.minStock.toLocaleString()} ${offer.unit}` : ""}
-                              </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-lg font-semibold text-gray-900">฿{offer.price.toFixed(2)}</p>
-                              <p className="text-sm text-gray-500">ต่อ {offer.unit}</p>
-                              {canManageOffer(offer.sellerId) && (
-                                <div className="mt-2 flex items-center justify-end gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setEditingProductId(offer.id)}
-                                  >
-                                    <Edit className="mr-1 h-3.5 w-3.5" />
-                                    แก้ไข
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-red-600 hover:text-red-700"
-                                    onClick={() => setDeletingProductId(offer.id)}
-                                  >
-                                    <Trash2 className="mr-1 h-3.5 w-3.5" />
-                                    ลบ
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
-        ))
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-600">ผู้ขาย: {offer.sellerName}</p>
+                  <p className="text-sm text-gray-600">คงเหลือ {offer.quantity.toLocaleString()}</p>
+                </div>
+
+                <div className="flex items-end justify-between">
+                  <p className="text-2xl font-bold text-emerald-800">฿{offer.price.toFixed(2)}</p>
+                  {offer.sellerId === user?.id && <Badge variant="secondary">สินค้าของฉัน</Badge>}
+                </div>
+
+                {canManageOffer(offer.sellerId) && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setEditingProductId(offer.id)}
+                    >
+                      <Edit className="mr-1 h-3.5 w-3.5" />
+                      แก้ไข
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-red-600 hover:text-red-700"
+                      onClick={() => setDeletingProductId(offer.id)}
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      ลบ
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </Card>
+          ))}
+        </section>
       )}
 
       {selectedEditingProduct && (
