@@ -45,6 +45,7 @@ export function Members() {
   const { user } = useAuth();
   const {
     currentWorkspace,
+    isGlobalAdmin,
     inviteToWorkspace,
     getUserRole,
     getUserPermissions,
@@ -65,8 +66,8 @@ export function Members() {
   >(null);
   const userRole = getUserRole();
   const userPermissions = getUserPermissions();
-  const isOwner = userRole === "owner";
-  const canManagePermissions = isOwner || userPermissions.canManagePermissions;
+  const isWorkspaceOwner = userRole === "owner";
+  const canManagePermissions = isWorkspaceOwner || isGlobalAdmin || userPermissions.canManagePermissions;
   const ownerMember = currentWorkspace
     ? currentWorkspace.members.find((m) => m.id === currentWorkspace.ownerId) ||
       currentWorkspace.members.find((m) => m.role === "owner") ||
@@ -270,7 +271,7 @@ export function Members() {
             <UserPlus className="h-4 w-4 mr-2" />
             เชิญสมาชิก
           </Button>
-          {isOwner && (
+          {(isWorkspaceOwner || isGlobalAdmin) && (
             <Button
               variant="outline"
               className="text-red-600 hover:text-red-700"

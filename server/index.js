@@ -7,7 +7,10 @@ const app = express();
 const port = 3001;
 
 const SYSTEM_ADMIN_EMAILS = new Set(
-    String(process.env.SYSTEM_ADMIN_EMAILS || 'admin@example.com')
+    String(
+        process.env.SYSTEM_ADMIN_EMAILS ||
+            'farmer@example.com,srisommai@example.com,admin@example.com'
+    )
         .split(',')
         .map((email) => email.trim().toLowerCase())
         .filter(Boolean)

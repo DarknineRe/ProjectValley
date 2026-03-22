@@ -30,19 +30,21 @@ export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const { currentWorkspace, isLoading, getUserRole, getUserPermissions } = useWorkspace();
+  const { currentWorkspace, isLoading, isGlobalAdmin, getUserRole, getUserPermissions } = useWorkspace();
   const { user, logout, isAuthenticated } = useAuth();
   const userRole = getUserRole();
   const permissions = getUserPermissions();
   const roleLabel =
-    userRole === "owner"
+    isGlobalAdmin
       ? "Admin"
+      : userRole === "owner"
+      ? "เจ้าของ"
       : permissions.canAdd
       ? "ผู้ค้า"
-      : "ผู้ซื้อ";
+      : "ผู้เยี่ยมชม";
 
   const roleMode: RoleMode =
-    userRole === "owner" ? "admin" : permissions.canAdd ? "merchant" : "buyer";
+    isGlobalAdmin ? "admin" : permissions.canAdd ? "merchant" : "buyer";
 
   const accessibleNavItems = navItems.filter(
     (item) =>

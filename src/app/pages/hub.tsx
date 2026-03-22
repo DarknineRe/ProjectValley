@@ -24,6 +24,7 @@ export function Hub() {
   const { user, logout } = useAuth();
   const {
     workspaces,
+    isGlobalAdmin,
     deleteWorkspace,
     setCurrentWorkspace,
   } =
@@ -31,8 +32,7 @@ export function Hub() {
   const navigate = useNavigate();
   const [workspaceToDelete, setWorkspaceToDelete] = useState<Workspace | null>(null);
   const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
-  const isAdmin =
-    user?.role === "admin" || user?.email?.toLowerCase() === "admin@example.com";
+  const isAdmin = isGlobalAdmin;
   const visibleWorkspaces = isAdmin ? workspaces : workspaces.slice(0, 1);
 
   // Redirect if not authenticated
@@ -86,8 +86,11 @@ export function Hub() {
   };
 
   const getWorkspaceRoleLabel = (isOwner: boolean, memberCount: number) => {
+    if (isAdmin && !isOwner) {
+      return "Admin ระบบ";
+    }
     if (isOwner) {
-      return "Admin";
+      return "เจ้าของ";
     }
     return memberCount > 1 ? "สมาชิกตลาดกลาง" : "ผู้ใช้งาน";
   };

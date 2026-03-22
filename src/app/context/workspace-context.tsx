@@ -51,6 +51,7 @@ export interface WorkspacePermissions {
 interface WorkspaceContextType {
   workspaces: Workspace[];
   isLoading: boolean;
+  isGlobalAdmin: boolean;
   currentWorkspace: Workspace | null;
   setCurrentWorkspace: (workspace: Workspace | null) => void;
   createWorkspace: (name: string) => Promise<void>;
@@ -71,10 +72,17 @@ interface WorkspaceContextType {
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
+const SYSTEM_ADMIN_EMAILS = new Set([
+  "farmer@example.com",
+  "srisommai@example.com",
+  "admin@example.com",
+]);
+
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const isGlobalAdmin =
-    user?.role === "admin" || user?.email?.toLowerCase() === "admin@example.com";
+    user?.role === "admin" ||
+    SYSTEM_ADMIN_EMAILS.has(String(user?.email || "").toLowerCase());
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentWorkspace, setCurrentWorkspaceState] = useState<Workspace | null>(null);
@@ -338,7 +346,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const getUserRole = (): "owner" | "employee" | null => {
     if (!user || !currentWorkspace) return null;
-    if (isGlobalAdmin) return "owner";
     const member = currentWorkspace.members.find((m) => m.id === user.id);
     return member?.role || null;
   };
@@ -500,6 +507,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       value={{
         workspaces,
         isLoading,
+        isGlobalAdmin,
         currentWorkspace,
         setCurrentWorkspace,
         createWorkspace,
