@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import { useNavigate } from "react-router";
 import { useWorkspace } from "../context/workspace-context";
 import { useAuth } from "../context/auth-context";
@@ -64,10 +64,7 @@ export function Members() {
   const [selectedNewOwnerId, setSelectedNewOwnerId] = useState<string>("");
   const [isTransferring, setIsTransferring] = useState(false);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
-  const [selectedMemberForViewsId, setSelectedMemberForViewsId] = useState<string | null>(null);
-  const [viewPermissionDraft, setViewPermissionDraft] = useState<
-    Partial<WorkspacePermissions> | null
-  >(null);
+  const [expandedMemberPermissionsId, setExpandedMemberPermissionsId] = useState<string | null>(null);
   const userRole = getUserRole();
   const userPermissions = getUserPermissions();
   const isWorkspaceOwner = userRole === "owner";
@@ -208,9 +205,6 @@ export function Members() {
   }
 
   const owner = ownerMember;
-  const selectedMemberForViews = selectedMemberForViewsId
-    ? currentWorkspace.members.find((m) => m.id === selectedMemberForViewsId) || null
-    : null;
   const viewPermissionItems: Array<{
     key:
       | "viewDashboard"
@@ -235,37 +229,6 @@ export function Members() {
     { key: "viewActivity", label: "ประวัติการเปลี่ยนแปลง" },
   ];
 
-  useEffect(() => {
-    if (!selectedMemberForViews) {
-      setViewPermissionDraft(null);
-      return;
-    }
-
-    setViewPermissionDraft({
-      viewDashboard: selectedMemberForViews.viewDashboard,
-      viewInventory: selectedMemberForViews.viewInventory,
-      viewSummary: selectedMemberForViews.viewSummary,
-      viewCalendar: selectedMemberForViews.viewCalendar,
-      viewAnalysis: selectedMemberForViews.viewAnalysis,
-      viewPriceComparison: selectedMemberForViews.viewPriceComparison,
-      viewRecommendations: selectedMemberForViews.viewRecommendations,
-      viewMembers: selectedMemberForViews.viewMembers,
-      viewActivity: selectedMemberForViews.viewActivity,
-    });
-  }, [selectedMemberForViews]);
-
-  const applyViewPermissionDraft = async () => {
-    if (!selectedMemberForViews || !viewPermissionDraft) return;
-    const latestMember = currentWorkspace.members.find(
-      (m) => m.id === selectedMemberForViews.id
-    );
-    if (!latestMember) return;
-
-    const next = buildNextPermissions(latestMember, viewPermissionDraft);
-    await handlePermissionChange(latestMember.id, next);
-    setSelectedMemberForViewsId(null);
-  };
-
   const buildNextPermissions = (
     member: WorkspaceMember,
     patch: Partial<WorkspacePermissions>
@@ -288,6 +251,37 @@ export function Members() {
     };
   };
 
+  const countEnabledViewPages = (member: WorkspaceMember) =>
+    viewPermissionItems.reduce(
+      (total, item) => total + (member[item.key] ? 1 : 0),
+      0
+    );
+
+  const buildRolePreset = (
+    member: WorkspaceMember,
+    preset: "viewer" | "merchant" | "manager"
+  ): WorkspacePermissions => {
+    const viewPatch: Partial<WorkspacePermissions> = {
+      viewDashboard: true,
+      viewInventory: true,
+      viewSummary: true,
+      viewCalendar: preset !== "viewer",
+      viewAnalysis: preset !== "viewer",
+      viewPriceComparison: true,
+      viewRecommendations: preset !== "viewer",
+      viewMembers: preset === "manager",
+      viewActivity: preset !== "viewer",
+    };
+
+    return buildNextPermissions(member, {
+      canView: true,
+      canAdd: preset !== "viewer",
+      canEdit: preset !== "viewer",
+      canManagePermissions: preset === "manager",
+      ...viewPatch,
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -301,7 +295,7 @@ export function Members() {
         <div className="flex items-center gap-2">
           <Button
             onClick={() => setIsInviteDialogOpen(true)}
-            className="bg-green-600 hover:bg-green-700"
+            className="bg-slate-900 hover:bg-slate-800"
             disabled={!canManagePermissions}
           >
             <UserPlus className="h-4 w-4 mr-2" />
@@ -311,7 +305,7 @@ export function Members() {
             <>
               <Button
                 variant="outline"
-                className="text-purple-600 hover:text-purple-700"
+                className="text-slate-700 hover:text-slate-900"
                 onClick={() => setIsTransferOwnershipDialogOpen(true)}
               >
                 <Crown className="h-4 w-4 mr-2" />
@@ -330,8 +324,15 @@ export function Members() {
         </div>
       </div>
 
+      <Card className="p-4 border-slate-200 bg-slate-50">
+        <p className="text-sm font-medium text-slate-900">ตั้งค่าสิทธิ์แบบง่าย</p>
+        <p className="mt-1 text-sm text-slate-700">
+          1) เปิดสิทธิ์ดูข้อมูล 2) เลือกบทบาทลัด (ผู้เยี่ยมชม/ผู้ค้า/ผู้จัดการ) 3) กดปุ่มตั้งค่าหน้าเพื่อปรับรายหน้าตามต้องการ
+        </p>
+      </Card>
+
       {/* Workspace Info Card */}
-      <Card className="p-6 bg-gradient-to-r from-green-50 to-emerald-50">
+      <Card className="p-6 bg-white">
         <div className="flex items-center justify-between">
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -341,8 +342,8 @@ export function Members() {
               แชร์รหัสนี้กับคนที่คุณต้องการเชิญเข้าร่วม
             </p>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-lg border-2 border-green-300">
-                <Code className="h-5 w-5 text-green-600" />
+              <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-lg border">
+                <Code className="h-5 w-5 text-slate-700" />
                 <span className="font-mono text-2xl font-bold text-gray-900">
                   {currentWorkspace.code}
                 </span>
@@ -373,8 +374,8 @@ export function Members() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="p-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-blue-100 rounded-full">
-              <Users className="h-6 w-6 text-blue-600" />
+            <div className="p-3 bg-slate-100 rounded-full">
+              <Users className="h-6 w-6 text-slate-700" />
             </div>
             <div>
               <p className="text-sm text-gray-600">สมาชิกทั้งหมด</p>
@@ -387,8 +388,8 @@ export function Members() {
 
         <Card className="p-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-green-100 rounded-full">
-              <Crown className="h-6 w-6 text-green-600" />
+            <div className="p-3 bg-slate-100 rounded-full">
+              <Crown className="h-6 w-6 text-slate-700" />
             </div>
             <div>
               <p className="text-sm text-gray-600">เจ้าของ</p>
@@ -399,8 +400,8 @@ export function Members() {
 
         <Card className="p-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-100 rounded-full">
-              <User className="h-6 w-6 text-purple-600" />
+            <div className="p-3 bg-slate-100 rounded-full">
+              <User className="h-6 w-6 text-slate-700" />
             </div>
             <div>
               <p className="text-sm text-gray-600">ผู้ค้า</p>
@@ -413,8 +414,8 @@ export function Members() {
 
         <Card className="p-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-amber-100 rounded-full">
-              <User className="h-6 w-6 text-amber-600" />
+            <div className="p-3 bg-slate-100 rounded-full">
+              <User className="h-6 w-6 text-slate-700" />
             </div>
             <div>
               <p className="text-sm text-gray-600">ผู้เยี่ยมชม</p>
@@ -442,22 +443,22 @@ export function Members() {
                 <TableHead className="text-center">เพิ่มข้อมูล</TableHead>
                 <TableHead className="text-center">แก้ไข/ลบ</TableHead>
                 <TableHead className="text-center">จัดการสิทธิ์</TableHead>
-                <TableHead className="text-center">สิทธิ์การดูหน้า</TableHead>
+                <TableHead className="text-center">สิทธิ์การดูหน้า (หน้าเดียว)</TableHead>
                 <TableHead>เข้าร่วมเมื่อ</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {owner && (
-                <TableRow className="bg-green-50">
+                <TableRow className="bg-slate-50">
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Crown className="h-4 w-4 text-green-600" />
+                        <Crown className="h-4 w-4 text-slate-700" />
                       <span className="font-medium">{owner.name}</span>
                     </div>
                   </TableCell>
                   <TableCell>{owner.email}</TableCell>
                   <TableCell>
-                    <Badge className="bg-green-600 hover:bg-green-700">
+                      <Badge className="bg-slate-900 hover:bg-slate-800">
                       เจ้าของ
                     </Badge>
                   </TableCell>
@@ -483,99 +484,187 @@ export function Members() {
                   </TableCell>
                 </TableRow>
               )}
-              {visibleMembers.map((member) => (
-                <TableRow key={member.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-gray-400" />
-                      <span className="font-medium">{member.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{member.email}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{getMemberLabel(member)}</Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Switch
-                      checked={member.canView}
-                      disabled={!canManagePermissions || updatingMemberId === member.id}
-                      onCheckedChange={(checked) =>
-                        handlePermissionChange(
-                          member.id,
-                          buildNextPermissions(member, {
-                            canView: !!checked,
-                            canAdd: !!checked ? member.canAdd : false,
-                            canEdit: !!checked ? member.canEdit : false,
-                            canManagePermissions: !!checked ? member.canManagePermissions : false,
-                            viewDashboard: !!checked ? member.viewDashboard : false,
-                            viewInventory: !!checked ? member.viewInventory : false,
-                            viewSummary: !!checked ? member.viewSummary : false,
-                            viewCalendar: !!checked ? member.viewCalendar : false,
-                            viewAnalysis: !!checked ? member.viewAnalysis : false,
-                            viewPriceComparison: !!checked ? member.viewPriceComparison : false,
-                            viewRecommendations: !!checked ? member.viewRecommendations : false,
-                            viewMembers: !!checked ? member.viewMembers : false,
-                            viewActivity: !!checked ? member.viewActivity : false,
-                          })
-                        )
-                      }
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Switch
-                      checked={member.canAdd}
-                      disabled={!canManagePermissions || updatingMemberId === member.id || !member.canView}
-                      onCheckedChange={(checked) =>
-                        handlePermissionChange(
-                          member.id,
-                          buildNextPermissions(member, { canAdd: !!checked })
-                        )
-                      }
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Switch
-                      checked={member.canEdit}
-                      disabled={!canManagePermissions || updatingMemberId === member.id || !member.canView}
-                      onCheckedChange={(checked) =>
-                        handlePermissionChange(
-                          member.id,
-                          buildNextPermissions(member, { canEdit: !!checked })
-                        )
-                      }
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Switch
-                      checked={member.canManagePermissions}
-                      disabled={!canManagePermissions || updatingMemberId === member.id || !member.canView}
-                      onCheckedChange={(checked) =>
-                        handlePermissionChange(
-                          member.id,
-                          buildNextPermissions(member, {
-                            canManagePermissions: !!checked,
-                          })
-                        )
-                      }
-                    />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!canManagePermissions || updatingMemberId === member.id || !member.canView}
-                      onClick={() => setSelectedMemberForViewsId(member.id)}
-                    >
-                      ตั้งค่า
-                    </Button>
-                  </TableCell>
-                  <TableCell className="text-sm text-gray-600">
-                    {format(new Date(member.joinedAt), "d MMM yyyy", {
-                      locale: th,
-                    })}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {visibleMembers.map((member) => {
+                const isExpanded = expandedMemberPermissionsId === member.id;
+                const enabledViewCount = countEnabledViewPages(member);
+
+                return (
+                  <Fragment key={member.id}>
+                    <TableRow>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-gray-400" />
+                          <span className="font-medium">{member.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{member.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{getMemberLabel(member)}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Switch
+                          checked={member.canView}
+                          disabled={!canManagePermissions || updatingMemberId === member.id}
+                          onCheckedChange={(checked) =>
+                            handlePermissionChange(
+                              member.id,
+                              buildNextPermissions(member, {
+                                canView: !!checked,
+                                canAdd: !!checked ? member.canAdd : false,
+                                canEdit: !!checked ? member.canEdit : false,
+                                canManagePermissions: !!checked ? member.canManagePermissions : false,
+                                viewDashboard: !!checked ? member.viewDashboard : false,
+                                viewInventory: !!checked ? member.viewInventory : false,
+                                viewSummary: !!checked ? member.viewSummary : false,
+                                viewCalendar: !!checked ? member.viewCalendar : false,
+                                viewAnalysis: !!checked ? member.viewAnalysis : false,
+                                viewPriceComparison: !!checked ? member.viewPriceComparison : false,
+                                viewRecommendations: !!checked ? member.viewRecommendations : false,
+                                viewMembers: !!checked ? member.viewMembers : false,
+                                viewActivity: !!checked ? member.viewActivity : false,
+                              })
+                            )
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Switch
+                          checked={member.canAdd}
+                          disabled={!canManagePermissions || updatingMemberId === member.id || !member.canView}
+                          onCheckedChange={(checked) =>
+                            handlePermissionChange(
+                              member.id,
+                              buildNextPermissions(member, { canAdd: !!checked })
+                            )
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Switch
+                          checked={member.canEdit}
+                          disabled={!canManagePermissions || updatingMemberId === member.id || !member.canView}
+                          onCheckedChange={(checked) =>
+                            handlePermissionChange(
+                              member.id,
+                              buildNextPermissions(member, { canEdit: !!checked })
+                            )
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Switch
+                          checked={member.canManagePermissions}
+                          disabled={!canManagePermissions || updatingMemberId === member.id || !member.canView}
+                          onCheckedChange={(checked) =>
+                            handlePermissionChange(
+                              member.id,
+                              buildNextPermissions(member, {
+                                canManagePermissions: !!checked,
+                              })
+                            )
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <Badge variant="outline">{enabledViewCount}/{viewPermissionItems.length} หน้า</Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!canManagePermissions || updatingMemberId === member.id || !member.canView}
+                            onClick={() =>
+                              setExpandedMemberPermissionsId((prev) =>
+                                prev === member.id ? null : member.id
+                              )
+                            }
+                          >
+                            {isExpanded ? "ซ่อน" : "ตั้งค่าหน้า"}
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">
+                        {format(new Date(member.joinedAt), "d MMM yyyy", {
+                          locale: th,
+                        })}
+                      </TableCell>
+                    </TableRow>
+
+                    {isExpanded && (
+                      <TableRow>
+                        <TableCell colSpan={9}>
+                          <div className="rounded-lg border bg-gray-50 p-4">
+                            <div className="mb-3 flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium text-gray-800">บทบาทลัด:</span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!canManagePermissions || updatingMemberId === member.id}
+                                onClick={() =>
+                                  handlePermissionChange(
+                                    member.id,
+                                    buildRolePreset(member, "viewer")
+                                  )
+                                }
+                              >
+                                ผู้เยี่ยมชม
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!canManagePermissions || updatingMemberId === member.id}
+                                onClick={() =>
+                                  handlePermissionChange(
+                                    member.id,
+                                    buildRolePreset(member, "merchant")
+                                  )
+                                }
+                              >
+                                ผู้ค้า
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!canManagePermissions || updatingMemberId === member.id}
+                                onClick={() =>
+                                  handlePermissionChange(
+                                    member.id,
+                                    buildRolePreset(member, "manager")
+                                  )
+                                }
+                              >
+                                ผู้จัดการสิทธิ์
+                              </Button>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                              {viewPermissionItems.map((item) => (
+                                <div
+                                  key={item.key}
+                                  className="flex items-center justify-between gap-3 rounded-md border bg-white px-3 py-2"
+                                >
+                                  <span className="text-sm text-gray-700">{item.label}</span>
+                                  <Switch
+                                    checked={Boolean(member[item.key])}
+                                    disabled={!canManagePermissions || updatingMemberId === member.id || !member.canView}
+                                    onCheckedChange={(checked) =>
+                                      handlePermissionChange(
+                                        member.id,
+                                        buildNextPermissions(member, {
+                                          [item.key]: !!checked,
+                                        } as Partial<WorkspacePermissions>)
+                                      )
+                                    }
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -622,11 +711,11 @@ export function Members() {
                 onKeyDown={(e) => e.key === "Enter" && handleInvite()}
               />
             </div>
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-900 mb-2">
+            <div className="p-4 bg-slate-50 border rounded-lg">
+              <p className="text-sm text-slate-800 mb-2">
                 บัญชีนี้จะถูกเพิ่มเป็นผู้เยี่ยมชมอัตโนมัติ
               </p>
-              <p className="text-xs text-blue-700">
+              <p className="text-xs text-slate-600">
                 ผู้เยี่ยมชมจะสามารถเข้าใช้งาน Workspace นี้ได้ทันทีด้วยอีเมลและรหัสผ่านที่สร้าง
               </p>
             </div>
@@ -644,64 +733,12 @@ export function Members() {
               </Button>
               <Button
                 onClick={handleInvite}
-                className="bg-green-600 hover:bg-green-700"
+                className="bg-slate-900 hover:bg-slate-800"
               >
                 ส่งคำเชิญ
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!selectedMemberForViews}
-        onOpenChange={(open) => !open && setSelectedMemberForViewsId(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>กำหนดสิทธิ์การดูหน้า</DialogTitle>
-            <DialogDescription>
-              เลือกหน้าที่สมาชิกคนนี้สามารถเข้าดูได้ตามบทบาทที่กำหนด
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedMemberForViews && (
-            <div className="space-y-4">
-              {viewPermissionItems.map((item) => (
-                <div key={item.key} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">{item.label}</span>
-                  <Switch
-                    checked={Boolean(viewPermissionDraft?.[item.key])}
-                    disabled={updatingMemberId === selectedMemberForViews.id}
-                    onCheckedChange={(checked) => {
-                      setViewPermissionDraft((prev) => ({
-                        ...(prev || {}),
-                        [item.key]: !!checked,
-                      }));
-                    }}
-                  />
-                </div>
-              ))}
-
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSelectedMemberForViewsId(null)}
-                >
-                  ยกเลิก
-                </Button>
-                <Button
-                  type="button"
-                  className="bg-green-600 hover:bg-green-700"
-                  disabled={updatingMemberId === selectedMemberForViews.id}
-                  onClick={applyViewPermissionDraft}
-                >
-                  บันทึกสิทธิ์
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 
@@ -772,7 +809,7 @@ export function Members() {
             <Button
               onClick={handleTransferOwnership}
               disabled={isTransferring || !selectedNewOwnerId}
-              className="bg-purple-600 hover:bg-purple-700"
+              className="bg-slate-900 hover:bg-slate-800"
             >
               {isTransferring ? "กำลังโอน..." : "โอนความเป็นเจ้าของ"}
             </Button>

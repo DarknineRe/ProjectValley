@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "./ui/select";
 import type { Product } from "../context/data-context";
+import { toast } from "sonner";
 
 interface EditProductDialogProps {
   product: Product;
@@ -44,6 +45,7 @@ export function EditProductDialog({
   onOpenChange,
 }: EditProductDialogProps) {
   const { updateProduct } = useData();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: product.name,
     category: product.category,
@@ -72,22 +74,68 @@ export function EditProductDialog({
     });
   }, [product]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    updateProduct({
-      ...product,
-      name: formData.name,
-      category: formData.category,
-      quantity: Number(formData.quantity),
-      unit: formData.unit,
-      price: Number(formData.price),
-      minStock: Number(formData.minStock || 0),
-      imageUrl: formData.imageUrl.trim() || undefined,
-      harvestDate: formData.harvestDate ? new Date(formData.harvestDate) : undefined,
-    });
+    const name = formData.name.trim();
+    const quantity = Number(formData.quantity);
+    const price = Number(formData.price);
+    const minStock = Number(formData.minStock || 0);
 
-    onOpenChange(false);
+    if (!name) {
+      toast.error("กรุณาระบุชื่อสินค้า");
+      return;
+    }
+    if (!formData.category) {
+      toast.error("กรุณาเลือกหมวดหมู่");
+      return;
+    }
+    if (!formData.unit) {
+      toast.error("กรุณาเลือกหน่วยสินค้า");
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity < 0) {
+      toast.error("จำนวนสินค้าต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป");
+      return;
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      toast.error("ราคาต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป");
+      return;
+    }
+    if (!Number.isFinite(minStock) || minStock < 0) {
+      toast.error("ค่าแจ้งเตือนสต็อกต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป");
+      return;
+    }
+    if (formData.imageUrl.trim()) {
+      try {
+        const url = new URL(formData.imageUrl.trim());
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+          throw new Error("invalid-protocol");
+        }
+      } catch {
+        toast.error("ลิงก์รูปสินค้าไม่ถูกต้อง");
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    try {
+      await updateProduct({
+        ...product,
+        name,
+        category: formData.category,
+        quantity,
+        unit: formData.unit,
+        price,
+        minStock,
+        imageUrl: formData.imageUrl.trim() || undefined,
+        harvestDate: formData.harvestDate ? new Date(formData.harvestDate) : undefined,
+      });
+
+      onOpenChange(false);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -109,6 +157,8 @@ export function EditProductDialog({
                   setFormData({ ...formData, name: e.target.value })
                 }
                 placeholder="ระบุชื่อสินค้า"
+                maxLength={120}
+                disabled={isSubmitting}
               />
             </div>
 
@@ -121,7 +171,7 @@ export function EditProductDialog({
                   setFormData({ ...formData, category: value })
                 }
               >
-                <SelectTrigger id="edit-category">
+                <SelectTrigger id="edit-category" disabled={isSubmitting}>
                   <SelectValue placeholder="เลือกหมวดหมู่" />
                 </SelectTrigger>
                 <SelectContent>
@@ -146,6 +196,7 @@ export function EditProductDialog({
                   setFormData({ ...formData, quantity: e.target.value })
                 }
                 placeholder="0"
+                disabled={isSubmitting}
               />
             </div>
 
@@ -162,6 +213,7 @@ export function EditProductDialog({
                   setFormData({ ...formData, price: e.target.value })
                 }
                 placeholder="เช่น 45.00"
+                disabled={isSubmitting}
               />
             </div>
 
@@ -176,6 +228,7 @@ export function EditProductDialog({
                   setFormData({ ...formData, minStock: e.target.value })
                 }
                 placeholder="เช่น 10"
+                disabled={isSubmitting}
               />
             </div>
 
@@ -188,7 +241,7 @@ export function EditProductDialog({
                   setFormData({ ...formData, unit: value })
                 }
               >
-                <SelectTrigger id="edit-unit">
+                <SelectTrigger id="edit-unit" disabled={isSubmitting}>
                   <SelectValue placeholder="เลือกหน่วย" />
                 </SelectTrigger>
                 <SelectContent>
@@ -210,6 +263,7 @@ export function EditProductDialog({
                 onChange={(e) =>
                   setFormData({ ...formData, harvestDate: e.target.value })
                 }
+                disabled={isSubmitting}
               />
             </div>
 
@@ -223,6 +277,7 @@ export function EditProductDialog({
                   setFormData({ ...formData, imageUrl: e.target.value })
                 }
                 placeholder="https://example.com/product.jpg"
+                disabled={isSubmitting}
               />
             </div>
 
@@ -237,11 +292,12 @@ export function EditProductDialog({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
             >
               ยกเลิก
             </Button>
-            <Button type="submit" className="bg-green-600 hover:bg-green-700">
-              บันทึก
+            <Button type="submit" className="bg-green-600 hover:bg-green-700" disabled={isSubmitting}>
+              {isSubmitting ? "กำลังบันทึก..." : "บันทึก"}
             </Button>
           </DialogFooter>
         </form>

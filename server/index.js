@@ -704,6 +704,65 @@ app.delete('/api/workspaces/:id', async (req, res) => {
     }
 });
 
+app.put('/api/workspaces/:id', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const workspaceId = req.params.id;
+        const { userId, name } = req.body;
+
+        if (!workspaceId || !userId || !name) {
+            return res.status(400).json({ error: 'workspace id, userId and name are required' });
+        }
+
+        const trimmedName = String(name).trim();
+        if (trimmedName.length < 2) {
+            return res.status(400).json({ error: 'Workspace name must be at least 2 characters' });
+        }
+
+        const { rows: workspaceRows } = await client.query(
+            'SELECT id, owner_id, code, created_at FROM workspaces WHERE id = $1 LIMIT 1',
+            [workspaceId]
+        );
+
+        if (workspaceRows.length === 0) {
+            return res.status(404).json({ error: 'Workspace not found' });
+        }
+
+        const { rows: requesterRows } = await client.query(
+            'SELECT role, email FROM users WHERE id = $1 LIMIT 1',
+            [String(userId)]
+        );
+
+        if (requesterRows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const workspace = workspaceRows[0];
+
+        if (workspace.owner_id !== String(userId)) {
+            return res.status(403).json({ error: 'Only workspace owner can rename this workspace' });
+        }
+
+        const { rows: updatedRows } = await client.query(
+            'UPDATE workspaces SET name = $1 WHERE id = $2 RETURNING id, name, code, owner_id, created_at',
+            [trimmedName, workspaceId]
+        );
+
+        const updated = updatedRows[0];
+        res.json({
+            id: updated.id,
+            name: updated.name,
+            code: updated.code,
+            ownerId: updated.owner_id,
+            createdAt: updated.created_at,
+        });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    } finally {
+        client.release();
+    }
+});
+
 app.put('/api/workspaces/:id/members/:memberId/permissions', async (req, res) => {
     const client = await pool.connect();
     try {
@@ -1466,6 +1525,24 @@ app.post('/api/products', async (req, res) => {
         if (!sellerId || !sellerName) {
             return res.status(400).json({ error: 'sellerId and sellerName are required' });
         }
+        if (!String(name || '').trim()) {
+            return res.status(400).json({ error: 'Product name is required' });
+        }
+        if (!String(category || '').trim()) {
+            return res.status(400).json({ error: 'Category is required' });
+        }
+        if (!String(unit || '').trim()) {
+            return res.status(400).json({ error: 'Unit is required' });
+        }
+        if (!Number.isFinite(Number(quantity)) || Number(quantity) < 0) {
+            return res.status(400).json({ error: 'Quantity must be a non-negative number' });
+        }
+        if (!Number.isFinite(Number(price)) || Number(price) < 0) {
+            return res.status(400).json({ error: 'Price must be a non-negative number' });
+        }
+        if (!Number.isFinite(Number(minStock)) || Number(minStock) < 0) {
+            return res.status(400).json({ error: 'minStock must be a non-negative number' });
+        }
         const id = Date.now().toString();
         const insertSql = `
             INSERT INTO products (id, workspace_id, name, category, quantity, unit, price, image_url, seller_id, seller_name, minStock, harvestDate, lastUpdated)
@@ -1478,7 +1555,7 @@ app.post('/api/products', async (req, res) => {
             workspaceId,
             name,
             category,
-            quantity,
+            Number(quantity),
             unit,
             Number(price),
             imageUrl || null,
@@ -1520,6 +1597,24 @@ app.put('/api/products/:id', async (req, res) => {
         if (!sellerId || !sellerName) {
             return res.status(400).json({ error: 'sellerId and sellerName are required' });
         }
+        if (!String(name || '').trim()) {
+            return res.status(400).json({ error: 'Product name is required' });
+        }
+        if (!String(category || '').trim()) {
+            return res.status(400).json({ error: 'Category is required' });
+        }
+        if (!String(unit || '').trim()) {
+            return res.status(400).json({ error: 'Unit is required' });
+        }
+        if (!Number.isFinite(Number(quantity)) || Number(quantity) < 0) {
+            return res.status(400).json({ error: 'Quantity must be a non-negative number' });
+        }
+        if (!Number.isFinite(Number(price)) || Number(price) < 0) {
+            return res.status(400).json({ error: 'Price must be a non-negative number' });
+        }
+        if (!Number.isFinite(Number(minStock)) || Number(minStock) < 0) {
+            return res.status(400).json({ error: 'minStock must be a non-negative number' });
+        }
         const sql = `
             UPDATE products
             SET name=$1, category=$2, quantity=$3, unit=$4, price=$5, image_url=$6, seller_id=$7, seller_name=$8, minStock=$9, harvestDate=$10, lastUpdated=$11
@@ -1530,7 +1625,7 @@ app.put('/api/products/:id', async (req, res) => {
         const result = await pool.query(sql, [
             name,
             category,
-            quantity,
+            Number(quantity),
             unit,
             Number(price),
             imageUrl || null,

@@ -4,6 +4,14 @@ import { useAuth } from "../context/auth-context";
 import { useWorkspace } from "../context/workspace-context";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Leaf, LogOut, Users, Code, ChevronRight, Building2, Trash2, Store } from "lucide-react";
+import { Leaf, LogOut, Users, Code, ChevronRight, Building2, Trash2, Store, Pencil } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
@@ -26,12 +34,16 @@ export function Hub() {
     workspaces,
     isGlobalAdmin,
     deleteWorkspace,
+    updateWorkspaceName,
     setCurrentWorkspace,
   } =
     useWorkspace();
   const navigate = useNavigate();
   const [workspaceToDelete, setWorkspaceToDelete] = useState<Workspace | null>(null);
+  const [workspaceToRename, setWorkspaceToRename] = useState<Workspace | null>(null);
+  const [workspaceNameDraft, setWorkspaceNameDraft] = useState("");
   const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
+  const [isRenamingWorkspace, setIsRenamingWorkspace] = useState(false);
   const isAdmin = isGlobalAdmin;
   const visibleWorkspaces = isAdmin ? workspaces : workspaces.slice(0, 1);
 
@@ -67,6 +79,37 @@ export function Hub() {
       toast.error("ไม่สามารถลบ Workspace ได้");
     } finally {
       setIsDeletingWorkspace(false);
+    }
+  };
+
+  const openRenameDialog = (workspace: Workspace) => {
+    setWorkspaceToRename(workspace);
+    setWorkspaceNameDraft(workspace.name);
+  };
+
+  const handleRenameWorkspace = async () => {
+    if (!workspaceToRename) return;
+
+    const trimmedName = workspaceNameDraft.trim();
+    if (trimmedName.length < 2) {
+      toast.error("ชื่อ Workspace ต้องมีอย่างน้อย 2 ตัวอักษร");
+      return;
+    }
+
+    setIsRenamingWorkspace(true);
+    try {
+      const success = await updateWorkspaceName(workspaceToRename.id, trimmedName);
+      if (success) {
+        toast.success("เปลี่ยนชื่อ Workspace สำเร็จ");
+        setWorkspaceToRename(null);
+        setWorkspaceNameDraft("");
+      } else {
+        toast.error("ไม่สามารถเปลี่ยนชื่อ Workspace ได้");
+      }
+    } catch {
+      toast.error("ไม่สามารถเปลี่ยนชื่อ Workspace ได้");
+    } finally {
+      setIsRenamingWorkspace(false);
     }
   };
 
@@ -182,6 +225,7 @@ export function Hub() {
               <div className="grid grid-cols-1 gap-4">
                 {visibleWorkspaces.map((workspace) => {
                   const isOwner = workspace.ownerId === user?.id;
+                  const canRenameWorkspace = isOwner;
                   return (
                     <Card
                       key={workspace.id}
@@ -218,6 +262,19 @@ export function Hub() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          {canRenameWorkspace && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openRenameDialog(workspace);
+                              }}
+                              title="เปลี่ยนชื่อ Workspace"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
                           {isOwner && (
                             <Button
                               variant="outline"
@@ -281,6 +338,55 @@ export function Hub() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={!!workspaceToRename}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWorkspaceToRename(null);
+            setWorkspaceNameDraft("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>เปลี่ยนชื่อ Workspace</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              ตั้งชื่อใหม่ให้ Workspace เพื่อให้สมาชิกหาเจอและแยกแยะได้ง่ายขึ้น
+            </p>
+            <Input
+              value={workspaceNameDraft}
+              onChange={(event) => setWorkspaceNameDraft(event.target.value)}
+              placeholder="ระบุชื่อ Workspace ใหม่"
+              maxLength={100}
+              disabled={isRenamingWorkspace}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setWorkspaceToRename(null);
+                setWorkspaceNameDraft("");
+              }}
+              disabled={isRenamingWorkspace}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              type="button"
+              className="bg-green-600 hover:bg-green-700"
+              onClick={handleRenameWorkspace}
+              disabled={isRenamingWorkspace}
+            >
+              {isRenamingWorkspace ? "กำลังบันทึก..." : "บันทึกชื่อใหม่"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

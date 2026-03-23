@@ -149,16 +149,26 @@ export function Marketplace() {
 
   const handleDeleteProduct = async () => {
     if (!deletingProductId) return;
+    const productToDelete = products.find((product) => product.id === deletingProductId);
+    if (!productToDelete) {
+      toast.error('ไม่พบข้อมูลสินค้าที่ต้องการลบ');
+      return;
+    }
+
     try {
-      const res = await fetch(`${API_BASE}/api/products/${deletingProductId}`, {
+      const workspaceQuery = productToDelete.workspace_id
+        ? `?workspace_id=${encodeURIComponent(productToDelete.workspace_id)}`
+        : '';
+      const res = await fetch(`${API_BASE}/api/products/${deletingProductId}${workspaceQuery}`, {
         method: 'DELETE'
       });
-      if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.changes > 0) {
         setProducts(prev => prev.filter(p => p.id !== deletingProductId));
         toast.success('ลบสินค้าสำเร็จ');
         setDeletingProductId(null);
       } else {
-        toast.error('ไม่สามารถลบสินค้า');
+        toast.error(data?.error || 'ไม่สามารถลบสินค้า');
       }
     } catch (error) {
       toast.error('เกิดข้อผิดพลาดในการลบสินค้า');
@@ -168,12 +178,11 @@ export function Marketplace() {
   if (isLoading) {
     return (
       <div className="space-y-8">
-        <section className="relative overflow-hidden rounded-3xl border border-emerald-800 bg-[radial-gradient(circle_at_top_right,_#166534_0%,_#064e3b_45%,_#052e16_100%)] px-6 py-10 text-white shadow-xl md:px-10">
-          <div className="absolute -top-16 -right-8 h-48 w-48 rounded-full bg-emerald-300/10 blur-2xl" />
+        <section className="rounded-2xl border bg-white px-6 py-8 md:px-10">
           <div className="relative">
-            <p className="mb-2 text-xs uppercase tracking-[0.3em] text-emerald-200">กำลังโหลด...</p>
-            <h2 className="text-3xl font-bold md:text-4xl">ตลาดกลาง</h2>
-            <p className="mt-2 text-neutral-200">กำลังโหลดข้อมูลสินค้าจากทั้งระบบ กรุณารอสักครู่...</p>
+            <p className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">กำลังโหลด...</p>
+            <h2 className="text-3xl font-semibold text-slate-900 md:text-4xl">ตลาดกลาง</h2>
+            <p className="mt-2 text-slate-600">กำลังโหลดข้อมูลสินค้าจากทั้งระบบ กรุณารอสักครู่...</p>
           </div>
         </section>
       </div>
@@ -182,13 +191,11 @@ export function Marketplace() {
 
   return (
     <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-3xl border border-emerald-800 bg-[radial-gradient(circle_at_top_right,_#166534_0%,_#064e3b_45%,_#052e16_100%)] px-6 py-10 text-white shadow-xl md:px-10">
-        <div className="absolute -top-16 -right-8 h-48 w-48 rounded-full bg-emerald-300/10 blur-2xl" />
-        <div className="absolute bottom-0 left-0 h-24 w-full bg-gradient-to-t from-black/25 to-transparent" />
+      <section className="rounded-2xl border bg-white px-6 py-8 md:px-10">
         <div className="relative">
-          <p className="mb-2 text-xs uppercase tracking-[0.3em] text-emerald-200">Marketplace</p>
-          <h2 className="text-3xl font-bold md:text-4xl">ค้นหาและเปรียบเทียบสินค้าจากทุก Workspace</h2>
-          <p className="mt-3 max-w-3xl text-sm text-emerald-50/90 md:text-base">
+          <p className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Marketplace</p>
+          <h2 className="text-3xl font-semibold text-slate-900 md:text-4xl">ค้นหาและเปรียบเทียบสินค้าจากทุก Workspace</h2>
+          <p className="mt-3 max-w-3xl text-sm text-slate-600 md:text-base">
             ดูราคาสินค้า ชื่อผู้ขาย จำนวนคงเหลือ และ Workspace ต้นทางได้ในหน้าเดียว พร้อมค้นหาและกรองรายการได้ทันที
           </p>
         </div>
@@ -201,7 +208,7 @@ export function Marketplace() {
               <p className="text-sm text-gray-600">รายการสินค้าทั้งหมด</p>
               <p className="text-3xl font-bold text-gray-900">{summary.offers}</p>
             </div>
-            <Store className="h-6 w-6 text-emerald-700" />
+            <Store className="h-6 w-6 text-slate-700" />
           </div>
         </Card>
         <Card className="border-neutral-200 p-5">
@@ -210,7 +217,7 @@ export function Marketplace() {
               <p className="text-sm text-gray-600">ผู้ขายทั้งหมด</p>
               <p className="text-3xl font-bold text-gray-900">{summary.sellers}</p>
             </div>
-            <Users className="h-6 w-6 text-emerald-700" />
+            <Users className="h-6 w-6 text-slate-700" />
           </div>
         </Card>
         <Card className="border-neutral-200 p-5">
@@ -219,7 +226,7 @@ export function Marketplace() {
               <p className="text-sm text-gray-600">หมวดหมู่</p>
               <p className="text-3xl font-bold text-gray-900">{summary.categories}</p>
             </div>
-            <Package2 className="h-6 w-6 text-emerald-700" />
+            <Package2 className="h-6 w-6 text-slate-700" />
           </div>
         </Card>
       </div>
@@ -243,7 +250,7 @@ export function Marketplace() {
                   key={category}
                   type="button"
                   variant={isActive ? "default" : "outline"}
-                  className={isActive ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+                  className={isActive ? "bg-slate-900 hover:bg-slate-800" : ""}
                   onClick={() => setCategoryFilter(category)}
                 >
                   <Filter className="mr-2 h-4 w-4" />
@@ -332,7 +339,7 @@ export function Marketplace() {
 
                 <div className="flex items-end justify-between">
                   <div>
-                    <p className="text-2xl font-bold text-emerald-800">{priceFormatter.format(offer.price)}</p>
+                    <p className="text-2xl font-bold text-slate-900">{priceFormatter.format(offer.price)}</p>
                     <p className="text-xs text-gray-500">ต่อ {offer.unit}</p>
                   </div>
                   {offer.sellerId === user?.id && <Badge variant="secondary">สินค้าของฉัน</Badge>}

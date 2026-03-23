@@ -55,6 +55,7 @@ interface WorkspaceContextType {
   currentWorkspace: Workspace | null;
   setCurrentWorkspace: (workspace: Workspace | null) => void;
   createWorkspace: (name: string) => Promise<void>;
+  updateWorkspaceName: (workspaceId: string, name: string) => Promise<boolean>;
   joinWorkspace: (code: string) => Promise<boolean>;
   deleteWorkspace: (workspaceId: string) => Promise<boolean>;
   inviteToWorkspace: (
@@ -267,6 +268,35 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const nextWorkspaces = [created, ...workspaces];
     setWorkspaces(nextWorkspaces);
     setCurrentWorkspaceState(created);
+  };
+
+  const updateWorkspaceName = async (workspaceId: string, name: string): Promise<boolean> => {
+    if (!user?.id) return false;
+
+    const res = await fetch(
+      `${API_BASE}/api/workspaces/${encodeURIComponent(workspaceId)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, name }),
+      }
+    );
+
+    if (!res.ok) {
+      return false;
+    }
+
+    const refreshed = await fetchWorkspaces(user.id);
+    setWorkspaces(refreshed);
+    if (currentWorkspace?.id) {
+      const updatedCurrent =
+        refreshed.find((ws) => ws.id === currentWorkspace.id) ||
+        refreshed[0] ||
+        null;
+      setCurrentWorkspaceState(updatedCurrent);
+    }
+
+    return true;
   };
 
   const joinWorkspace = async (code: string): Promise<boolean> => {
@@ -511,6 +541,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         currentWorkspace,
         setCurrentWorkspace,
         createWorkspace,
+        updateWorkspaceName,
         joinWorkspace,
         deleteWorkspace,
         inviteToWorkspace,

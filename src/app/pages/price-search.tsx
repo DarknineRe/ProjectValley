@@ -221,9 +221,9 @@ export function PriceSearch() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-6 rounded-lg border border-blue-100">
+      <div className="bg-white p-6 rounded-lg border">
         <div className="flex items-center gap-2 mb-2">
-          <TrendingUp className="h-6 w-6 text-blue-600" />
+          <TrendingUp className="h-6 w-6 text-slate-700" />
           <h1 className="text-3xl font-bold text-gray-900">ค้นหาราคาสินค้า</h1>
         </div>
         <p className="text-gray-600">ค้นหาข้อมูลราคาย้อนหลังจากตลาดกลางของกระทรวงพาณิชย์ พร้อมช่วงวันที่ที่ต้องการเปรียบเทียบ</p>
@@ -323,7 +323,7 @@ export function PriceSearch() {
           <Button
             onClick={handleSearch}
             disabled={isLoading || isLoadingProducts || !productId}
-            className="w-full bg-blue-600 hover:bg-blue-700"
+            className="w-full bg-slate-900 hover:bg-slate-800"
           >
             <Search className="h-4 w-4 mr-2" />
             {isLoading ? "กำลังค้นหา..." : "ค้นหา"}
@@ -359,15 +359,15 @@ export function PriceSearch() {
 
           {resultSummary && (
             <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <Card className="border-blue-100 p-4">
+              <Card className="p-4">
                 <p className="text-sm text-gray-500">ราคาเฉลี่ย</p>
                 <p className="text-xl font-semibold text-gray-900">{currencyFormatter.format(resultSummary.average)}</p>
               </Card>
-              <Card className="border-blue-100 p-4">
+              <Card className="p-4">
                 <p className="text-sm text-gray-500">ราคาต่ำสุด</p>
                 <p className="text-xl font-semibold text-gray-900">{currencyFormatter.format(resultSummary.lowest)}</p>
               </Card>
-              <Card className="border-blue-100 p-4">
+              <Card className="p-4">
                 <p className="text-sm text-gray-500">ราคาสูงสุด</p>
                 <p className="text-xl font-semibold text-gray-900">{currencyFormatter.format(resultSummary.highest)}</p>
               </Card>
