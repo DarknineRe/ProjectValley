@@ -1,10 +1,17 @@
 import { createBrowserRouter, redirect } from "react-router";
 import { Layout } from "./components/layout";
 import { Marketplace } from "./pages/marketplace";
+import { Inventory } from "./pages/inventory";
+import { InventorySummary } from "./pages/inventory-summary";
+import { PlantingCalendar } from "./pages/planting-calendar";
+import { ActivityLog } from "./pages/activity-log";
+import { Members } from "./pages/members";
 import { Login } from "./pages/login";
 import { Register } from "./pages/register";
 import { Hub } from "./pages/hub";
 import { Profile } from "./pages/profile";
+import { PriceSearch } from "./pages/price-search";
+import { MarketplaceStandalone } from "./pages/marketplace-standalone";
 
 export const router = createBrowserRouter([
   {
@@ -28,15 +35,25 @@ export const router = createBrowserRouter([
     Component: Profile,
   },
   {
+    path: "/marketplace",
+    Component: MarketplaceStandalone,
+  },
+  {
     path: "/price-search",
-    loader: () => redirect("/workspace/marketplace"),
+    loader: () => redirect("/workspace/price-search"),
   },
   {
     path: "/workspace",
     Component: Layout,
     children: [
-      { index: true, loader: () => redirect("/workspace/marketplace") },
-      { path: "marketplace", Component: Marketplace },
+      { index: true, loader: () => redirect("/workspace/inventory") },
+      { path: "marketplace", loader: () => redirect("/marketplace") },
+      { path: "inventory", Component: Inventory },
+      { path: "summary", Component: InventorySummary },
+      { path: "price-search", Component: PriceSearch },
+      { path: "calendar", Component: PlantingCalendar },
+      { path: "members", Component: Members },
+      { path: "activity", Component: ActivityLog },
     ],
   },
   {

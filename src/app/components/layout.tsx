@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
-import { Package, Menu, User, Building2, LogOut, Store, Loader2 } from "lucide-react";
+import { Package, Calendar, BarChart3, Menu, ClipboardList, BarChart2, User, Users, Building2, LogOut, Store, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 import { useState, useEffect } from "react";
@@ -18,7 +18,13 @@ import {
 type RoleMode = "admin" | "merchant" | "buyer";
 
 const navItems = [
-  { path: "/workspace/marketplace", label: "ตลาดกลาง", icon: Store, permissionKey: "canView" as const, audience: ["admin", "merchant", "buyer"] as RoleMode[] },
+  { path: "/marketplace", label: "ตลาดกลาง", icon: Store, permissionKey: "canView" as const, audience: ["admin", "merchant", "buyer"] as RoleMode[] },
+  { path: "/workspace/inventory", label: "จัดการสต็อก", icon: Package, permissionKey: "viewInventory" as const, audience: ["admin", "merchant"] as RoleMode[] },
+  { path: "/workspace/summary", label: "สรุปสต็อก", icon: BarChart2, permissionKey: "viewSummary" as const, audience: ["admin", "merchant"] as RoleMode[] },
+  { path: "/workspace/price-search", label: "เช็กราคา", icon: BarChart3, permissionKey: "viewPriceComparison" as const, audience: ["admin", "merchant", "buyer"] as RoleMode[] },
+  { path: "/workspace/calendar", label: "ปฏิทินการปลูก", icon: Calendar, permissionKey: "viewCalendar" as const, audience: ["admin", "merchant"] as RoleMode[] },
+  { path: "/workspace/members", label: "สมาชิก", icon: Users, permissionKey: "viewMembers" as const, audience: ["admin"] as RoleMode[] },
+  { path: "/workspace/activity", label: "ประวัติการเปลี่ยนแปลง", icon: ClipboardList, permissionKey: "viewActivity" as const, audience: ["admin", "merchant"] as RoleMode[] },
 ];
 
 export function Layout() {
@@ -50,10 +56,10 @@ export function Layout() {
 
   const roleSubtitle =
     roleMode === "buyer"
-      ? "ดูข้อมูลสินค้าในตลาดกลาง"
+      ? "เลือกสินค้า ดูสต็อกของคุณและของผู้ขายคนอื่น แล้วกดซื้อได้ทันที"
       : roleMode === "merchant"
-      ? "ดูข้อมูลสินค้าในตลาดกลาง"
-      : "ดูข้อมูลสินค้าในตลาดกลาง";
+      ? "จัดการสต็อกของร้านคุณและตั้งราคาเพื่อขาย"
+      : "ดูภาพรวม จัดการผู้ค้า และกำหนดสิทธิ์ผู้ใช้งาน";
 
   // Redirect if not authenticated or no workspace
   useEffect(() => {
@@ -61,8 +67,24 @@ export function Layout() {
       navigate("/login");
     } else if (!isLoading && !currentWorkspace) {
       navigate("/hub");
-    } else if (location.pathname !== "/workspace/marketplace") {
-      navigate("/workspace/marketplace");
+    } else if (accessibleNavItems.length > 0) {
+      const isOutsideWorkspace = !location.pathname.startsWith("/workspace/");
+      if (isOutsideWorkspace && location.pathname !== "/marketplace") {
+        navigate(accessibleNavItems[0].path);
+        return;
+      }
+
+      if (!isOutsideWorkspace) {
+        const canAccessCurrent = accessibleNavItems.some(
+          (item) => item.path === location.pathname
+        );
+        if (!canAccessCurrent) {
+          const fallbackWorkspaceRoute =
+            accessibleNavItems.find((item) => item.path.startsWith("/workspace/")) ||
+            accessibleNavItems[0];
+          navigate(fallbackWorkspaceRoute.path);
+        }
+      }
     }
   }, [isAuthenticated, isLoading, currentWorkspace, accessibleNavItems, location.pathname, navigate]);
 

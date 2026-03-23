@@ -63,7 +63,7 @@ export function Hub() {
   const handleSelectWorkspace = (workspace: Workspace) => {
     setIsEnteringWorkspace(true);
     setCurrentWorkspace(workspace);
-    navigate("/workspace/marketplace");
+    navigate("/workspace/inventory");
   };
 
   const handleDeleteWorkspace = async () => {
@@ -212,7 +212,7 @@ export function Hub() {
           {isAdmin && (
             <Card
               className="p-6 mb-6 cursor-pointer hover:shadow-lg transition-shadow border-2 border-emerald-200 hover:border-emerald-400"
-              onClick={() => navigate("/workspace/marketplace")}
+              onClick={() => navigate("/marketplace")}
             >
               <div className="flex items-center gap-4">
                 <div className="p-3 bg-emerald-100 rounded-full">
