@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import { Search, Edit, Trash2, AlertCircle, Plus, FolderOpen, Minus } from "lucide-react";
+import { Search, Edit, Trash2, AlertCircle, Plus, FolderOpen, Minus, Loader2 } from "lucide-react";
 import type { Product } from "../context/data-context";
 import { EditProductDialog } from "../components/edit-product-dialog";
 import { AddProductDialog } from "../components/add-product-dialog";
@@ -45,7 +45,7 @@ import {
 } from "../components/ui/dialog";
 
 export function Inventory() {
-  const { products, updateProduct, deleteProduct, activityLogs, rollbackActivity } = useData();
+  const { products, updateProduct, deleteProduct, activityLogs, rollbackActivity, isLoading } = useData();
   const { getUserPermissions, getUserRole } = useWorkspace();
   const { user } = useAuth();
   const permissions = getUserPermissions();
@@ -231,6 +231,26 @@ export function Inventory() {
       setBubbleActionProductId(null);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">คลังสินค้าของผู้ค้า</h2>
+            <p className="text-gray-600 mt-1">กำลังโหลดข้อมูลสินค้า...</p>
+          </div>
+        </div>
+
+        <Card className="p-10">
+          <div className="flex items-center justify-center gap-3 text-green-700">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm font-medium">กำลังโหลดข้อมูลสินค้าและประวัติการเปลี่ยนแปลง</span>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
