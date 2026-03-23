@@ -1,12 +1,11 @@
 import { useMemo, useState, useEffect } from "react";
-import { useData } from "../context/data-context";
 import { useAuth } from "../context/auth-context";
 import { useWorkspace } from "../context/workspace-context";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Search, Store, Package2, Users, Filter, Sparkles, Edit, Trash2 } from "lucide-react";
+import { Search, Store, Package2, Users, Filter, Edit, Trash2 } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { EditProductDialog } from "../components/edit-product-dialog";
 import { toast } from "sonner";
@@ -21,6 +20,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
+
+const priceFormatter = new Intl.NumberFormat("th-TH", {
+  style: "currency",
+  currency: "THB",
+  minimumFractionDigits: 2,
+});
+
+const dateFormatter = new Intl.DateTimeFormat("th-TH", {
+  dateStyle: "medium",
+});
 
 export interface Product {
   id: string;
@@ -63,9 +72,9 @@ export function Marketplace() {
           setProducts(data.map((p: any) => ({
             id: p.id,
             name: p.name ?? p.product_name ?? p.productName ?? '',
-            category: p.category,
-            quantity: p.quantity,
-            unit: p.unit,
+            category: p.category ?? 'ไม่ระบุหมวดหมู่',
+            quantity: Number(p.quantity ?? 0),
+            unit: p.unit ?? 'หน่วย',
             price: Number(p.price ?? 0),
             imageUrl: p.image_url ?? p.imageUrl,
             sellerId: p.seller_id ?? p.sellerId ?? 'legacy',
@@ -74,7 +83,7 @@ export function Marketplace() {
             harvestDate: p.harvestdate ? new Date(p.harvestdate) : p.harvestDate ? new Date(p.harvestDate) : undefined,
             lastUpdated: p.lastupdated ? new Date(p.lastupdated) : p.lastUpdated ? new Date(p.lastUpdated) : new Date(),
             workspace_id: p.workspace_id,
-            workspace_name: p.workspace_name
+            workspace_name: p.workspace_name ?? 'ไม่ระบุ Workspace'
           })));
         } else {
           const errorText = await res.text();
@@ -109,7 +118,8 @@ export function Marketplace() {
         const matchesSearch =
           product.name.toLowerCase().includes(q) ||
           product.category.toLowerCase().includes(q) ||
-          product.sellerName.toLowerCase().includes(q);
+          product.sellerName.toLowerCase().includes(q) ||
+          product.workspace_name?.toLowerCase().includes(q);
         const matchesCategory =
           categoryFilter === "ทั้งหมด" || product.category === categoryFilter;
         return matchesSearch && matchesCategory;
@@ -120,8 +130,6 @@ export function Marketplace() {
       });
   }, [categoryFilter, products, search]);
 
-  const featuredOffers = useMemo(() => visibleProducts.slice(0, 3), [visibleProducts]);
-
   const summary = useMemo(() => {
     const sellerCount = new Set(products.map((product) => product.sellerId)).size;
     return {
@@ -130,6 +138,8 @@ export function Marketplace() {
       categories: categories.length - 1,
     };
   }, [categories.length, products]);
+
+  const hasActiveFilters = search.trim().length > 0 || categoryFilter !== "ทั้งหมด";
 
   const canManageOffer = (sellerId: string) => {
     if (!permissions.canEdit) return false;
@@ -176,15 +186,11 @@ export function Marketplace() {
         <div className="absolute -top-16 -right-8 h-48 w-48 rounded-full bg-emerald-300/10 blur-2xl" />
         <div className="absolute bottom-0 left-0 h-24 w-full bg-gradient-to-t from-black/25 to-transparent" />
         <div className="relative">
-          <p className="mb-2 text-xs uppercase tracking-[0.3em] text-emerald-200">Welcome To Marketplace</p>
-          <h2 className="text-3xl font-bold md:text-4xl">ดูรายการสินค้าทั้งหมด</h2>
-          <p className="mt-2 max-w-2xl text-sm text-neutral-200 md:text-base">
-            ตลาดกลางสไตล์โชว์เคสสินค้า แสดงรายการทั้งหมดจากทุก Workspace โดยผู้ดูแลสามารถแก้ไขและลบสินค้าได้
+          <p className="mb-2 text-xs uppercase tracking-[0.3em] text-emerald-200">Marketplace</p>
+          <h2 className="text-3xl font-bold md:text-4xl">ค้นหาและเปรียบเทียบสินค้าจากทุก Workspace</h2>
+          <p className="mt-3 max-w-3xl text-sm text-emerald-50/90 md:text-base">
+            ดูราคาสินค้า ชื่อผู้ขาย จำนวนคงเหลือ และ Workspace ต้นทางได้ในหน้าเดียว พร้อมค้นหาและกรองรายการได้ทันที
           </p>
-          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/40 bg-emerald-200/10 px-4 py-2 text-sm text-emerald-100">
-            <Sparkles className="h-4 w-4" />
-            {user ? `กำลังดูในชื่อ ${user.name}` : "เข้าสู่ระบบเพื่อดูข้อมูลตลาดกลาง"}
-          </div>
         </div>
       </section>
 
@@ -225,7 +231,7 @@ export function Marketplace() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="ค้นหาตามชื่อสินค้า หมวดหมู่ หรือชื่อผู้ขาย"
+              placeholder="ค้นหาตามชื่อสินค้า หมวดหมู่ ผู้ขาย หรือชื่อ Workspace"
               className="pl-10"
             />
           </div>
@@ -247,27 +253,43 @@ export function Marketplace() {
             })}
           </div>
         </div>
+        <div className="mt-4 flex flex-col gap-3 border-t border-neutral-100 pt-4 text-sm text-gray-600 md:flex-row md:items-center md:justify-between">
+          <p>
+            แสดงผล <span className="font-semibold text-gray-900">{visibleProducts.length}</span> จาก <span className="font-semibold text-gray-900">{products.length}</span> รายการ
+          </p>
+          {hasActiveFilters && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setSearch("");
+                setCategoryFilter("ทั้งหมด");
+              }}
+            >
+              ล้างตัวกรอง
+            </Button>
+          )}
+        </div>
       </Card>
 
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xl font-semibold text-gray-900">Limited Time Offers</h3>
-          <Badge className="bg-emerald-600 hover:bg-emerald-600">Top 3 ราคาดีสุด</Badge>
-        </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {featuredOffers.map((offer) => (
-            <Card key={`featured-${offer.id}`} className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-4">
-              <p className="text-sm font-medium text-emerald-800">{offer.name}</p>
-              <p className="mt-2 text-2xl font-bold text-gray-900">฿{offer.price.toFixed(2)}</p>
-              <p className="text-xs text-gray-500 line-through">฿{(offer.price * 1.25).toFixed(2)}</p>
-              <p className="mt-2 text-xs text-gray-600">โดย {offer.sellerName}</p>
-            </Card>
-          ))}
-        </div>
-      </section>
-
       {visibleProducts.length === 0 ? (
-        <Card className="p-10 text-center text-gray-500">ยังไม่มีสินค้าที่ตรงกับเงื่อนไขที่ค้นหา</Card>
+        <Card className="p-10 text-center text-gray-500">
+          <p className="text-base font-medium text-gray-700">ยังไม่พบสินค้าที่ตรงกับเงื่อนไข</p>
+          <p className="mt-2 text-sm text-gray-500">ลองค้นหาด้วยชื่อสินค้า ชื่อผู้ขาย หรือกดล้างตัวกรองเพื่อดูทั้งหมด</p>
+          {hasActiveFilters && (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4"
+              onClick={() => {
+                setSearch("");
+                setCategoryFilter("ทั้งหมด");
+              }}
+            >
+              แสดงสินค้าทั้งหมด
+            </Button>
+          )}
+        </Card>
       ) : (
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleProducts.map((offer) => (
@@ -295,13 +317,24 @@ export function Marketplace() {
                   <Badge variant="outline">{offer.unit}</Badge>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-gray-600">ผู้ขาย: {offer.sellerName}</p>
-                  <p className="text-sm text-gray-600">คงเหลือ {offer.quantity.toLocaleString()}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="secondary">{offer.workspace_name}</Badge>
+                  {offer.quantity <= offer.minStock && offer.minStock > 0 && (
+                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">สต็อกใกล้หมด</Badge>
+                  )}
+                </div>
+
+                <div className="space-y-1 text-sm text-gray-600">
+                  <p>ผู้ขาย: {offer.sellerName}</p>
+                  <p>คงเหลือ {offer.quantity.toLocaleString("th-TH")} {offer.unit}</p>
+                  <p>อัปเดตล่าสุด {dateFormatter.format(offer.lastUpdated)}</p>
                 </div>
 
                 <div className="flex items-end justify-between">
-                  <p className="text-2xl font-bold text-emerald-800">฿{offer.price.toFixed(2)}</p>
+                  <div>
+                    <p className="text-2xl font-bold text-emerald-800">{priceFormatter.format(offer.price)}</p>
+                    <p className="text-xs text-gray-500">ต่อ {offer.unit}</p>
+                  </div>
                   {offer.sellerId === user?.id && <Badge variant="secondary">สินค้าของฉัน</Badge>}
                 </div>
 

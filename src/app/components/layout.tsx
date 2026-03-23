@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
-import { Package, Calendar, BarChart3, Menu, ClipboardList, BarChart2, User, Users, Building2, LogOut } from "lucide-react";
+import { Package, Calendar, BarChart3, Menu, ClipboardList, BarChart2, User, Users, Building2, LogOut, Store } from "lucide-react";
 import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 import { useState, useEffect } from "react";
@@ -18,6 +18,7 @@ import {
 type RoleMode = "admin" | "merchant" | "buyer";
 
 const navItems = [
+  { path: "/workspace/marketplace", label: "ตลาดกลาง", icon: Store, permissionKey: "canView" as const, audience: ["admin", "merchant", "buyer"] as RoleMode[] },
   { path: "/workspace/inventory", label: "จัดการสต็อก", icon: Package, permissionKey: "viewInventory" as const, audience: ["admin", "merchant"] as RoleMode[] },
   { path: "/workspace/summary", label: "สรุปสต็อก", icon: BarChart2, permissionKey: "viewSummary" as const, audience: ["admin", "merchant"] as RoleMode[] },
   { path: "/workspace/price-search", label: "เช็กราคา", icon: BarChart3, permissionKey: "viewPriceComparison" as const, audience: ["admin", "merchant", "buyer"] as RoleMode[] },

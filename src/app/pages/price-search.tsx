@@ -22,6 +22,18 @@ import {
   TableRow,
 } from "../components/ui/table";
 
+const currencyFormatter = new Intl.NumberFormat("th-TH", {
+  style: "currency",
+  currency: "THB",
+  minimumFractionDigits: 2,
+});
+
+function getDateOffset(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split("T")[0];
+}
+
 interface PriceData {
   product_id: string;
   product_name: string;
@@ -42,8 +54,8 @@ export function PriceSearch() {
   const [productId, setProductId] = useState("");
   const [productSearchText, setProductSearchText] = useState("");
   const [products, setProducts] = useState<ProductOption[]>([]);
-  const [fromDate, setFromDate] = useState("2026-02-27");
-  const [toDate, setToDate] = useState("2026-02-28");
+  const [fromDate, setFromDate] = useState(() => getDateOffset(-7));
+  const [toDate, setToDate] = useState(() => getDateOffset(0));
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [searchResults, setSearchResults] = useState<PriceData[]>([]);
@@ -56,7 +68,7 @@ export function PriceSearch() {
       setIsLoadingProducts(true);
       try {
         const base = API_BASE;
-        const response = await fetch(`${base}/api/market-prices/products?limit=500`);
+        const response = await fetch(`${base}/api/market-prices/products?limit=2000`);
         if (!response.ok) {
           throw new Error("ไม่สามารถโหลดรายการสินค้าได้");
         }
@@ -71,15 +83,10 @@ export function PriceSearch() {
                 name: String(item.name || item.id || "").trim(),
               }))
               .filter((item) => item.id.length > 0)
+              .sort((left, right) => left.name.localeCompare(right.name, "th"))
           : [];
 
         setProducts(normalized);
-
-        if (normalized.length > 0) {
-          const firstProduct = normalized[0];
-          setProductId(firstProduct.id);
-          setProductSearchText(`${firstProduct.name} (${firstProduct.id})`);
-        }
       } catch (error: any) {
         if (!cancelled) {
           toast.error(error.message || "โหลดรายการสินค้าไม่สำเร็จ");
@@ -107,9 +114,45 @@ export function PriceSearch() {
     );
   }, [products, productSearchText]);
 
+  const visibleProductOptions = useMemo(
+    () => filteredProducts.slice(0, 100),
+    [filteredProducts]
+  );
+
+  const selectedProduct = useMemo(
+    () => products.find((product) => product.id === productId) || null,
+    [productId, products]
+  );
+
+  const resultSummary = useMemo(() => {
+    if (searchResults.length === 0) {
+      return null;
+    }
+
+    const prices = searchResults
+      .map((item) => item.avg_price ?? item.min_price ?? item.max_price)
+      .filter((price): price is number => typeof price === "number" && Number.isFinite(price));
+
+    if (prices.length === 0) {
+      return null;
+    }
+
+    const total = prices.reduce((sum, price) => sum + price, 0);
+    return {
+      average: total / prices.length,
+      lowest: Math.min(...prices),
+      highest: Math.max(...prices),
+    };
+  }, [searchResults]);
+
   const handleSearch = async () => {
     if (!productId || !fromDate || !toDate) {
       toast.error("กรุณากรอกข้อมูลให้ครบ");
+      return;
+    }
+
+    if (fromDate > toDate) {
+      toast.error("วันที่เริ่มต้นต้องไม่มากกว่าวันที่สิ้นสุด");
       return;
     }
 
@@ -136,6 +179,7 @@ export function PriceSearch() {
     } catch (error: any) {
       toast.error(error.message || "เกิดข้อผิดพลาด");
       setSearchResults([]);
+      setHasSearched(true);
     } finally {
       setIsLoading(false);
     }
@@ -182,7 +226,7 @@ export function PriceSearch() {
           <TrendingUp className="h-6 w-6 text-blue-600" />
           <h1 className="text-3xl font-bold text-gray-900">ค้นหาราคาสินค้า</h1>
         </div>
-        <p className="text-gray-600">ค้นหาข้อมูลราคาสินค้าจากตลาดกลาง (กระทรวงพาณิชย์)</p>
+        <p className="text-gray-600">ค้นหาข้อมูลราคาย้อนหลังจากตลาดกลางของกระทรวงพาณิชย์ พร้อมช่วงวันที่ที่ต้องการเปรียบเทียบ</p>
       </div>
 
       {/* Search Cards */}
@@ -191,8 +235,11 @@ export function PriceSearch() {
           <Label className="text-sm font-medium mb-2 block">เลือกสินค้า</Label>
           <Input
             value={productSearchText}
-            onChange={(e) => setProductSearchText(e.target.value)}
-            placeholder="พิมพ์ชื่อหรือรหัสสินค้า"
+            onChange={(e) => {
+              setProductSearchText(e.target.value);
+              setProductId("");
+            }}
+            placeholder="พิมพ์ชื่อหรือรหัสสินค้า เช่น ข้าว มะม่วง P11012"
             className="mb-2"
           />
           <Select
@@ -201,7 +248,7 @@ export function PriceSearch() {
               setProductId(value);
               const selected = products.find((product) => product.id === value);
               if (selected) {
-                setProductSearchText(`${selected.name} (${selected.id})`);
+                setProductSearchText(selected.name);
               }
             }}
           >
@@ -209,8 +256,8 @@ export function PriceSearch() {
               <SelectValue placeholder={isLoadingProducts ? "กำลังโหลดสินค้า..." : "เลือกสินค้า"} />
             </SelectTrigger>
             <SelectContent>
-              {filteredProducts.length > 0 ? (
-                filteredProducts.map((product) => (
+              {visibleProductOptions.length > 0 ? (
+                visibleProductOptions.map((product) => (
                   <SelectItem key={product.id} value={product.id}>
                     {product.name} ({product.id})
                   </SelectItem>
@@ -220,7 +267,14 @@ export function PriceSearch() {
               )}
             </SelectContent>
           </Select>
-          <p className="mt-2 text-xs text-gray-500">สินค้าทั้งหมด {products.length} รายการ</p>
+          <p className="mt-2 text-xs text-gray-500">
+            {productId && selectedProduct
+              ? `เลือกแล้ว: ${selectedProduct.name} (${selectedProduct.id})`
+              : `สินค้าทั้งหมด ${products.length} รายการ`}
+          </p>
+          {filteredProducts.length > 100 && (
+            <p className="mt-1 text-xs text-amber-600">พบหลายรายการ กรุณาพิมพ์เพิ่มเพื่อจำกัดผลลัพธ์</p>
+          )}
         </Card>
 
         <Card className="p-4">
@@ -247,6 +301,22 @@ export function PriceSearch() {
               className="pl-10"
             />
           </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[7, 14, 30].map((days) => (
+              <Button
+                key={days}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setFromDate(getDateOffset(-(days - 1)));
+                  setToDate(getDateOffset(0));
+                }}
+              >
+                ย้อนหลัง {days} วัน
+              </Button>
+            ))}
+          </div>
         </Card>
 
         <Card className="p-4 flex flex-col justify-end">
@@ -258,6 +328,9 @@ export function PriceSearch() {
             <Search className="h-4 w-4 mr-2" />
             {isLoading ? "กำลังค้นหา..." : "ค้นหา"}
           </Button>
+          <p className="mt-3 text-xs text-gray-500">
+            เลือกสินค้าและช่วงวันที่ก่อนค้นหา
+          </p>
         </Card>
       </div>
 
@@ -265,9 +338,16 @@ export function PriceSearch() {
       {hasSearched && (
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold">
-              ผลการค้นหา ({searchResults.length} รายการ)
-            </h2>
+            <div>
+              <h2 className="text-xl font-bold">
+                ผลการค้นหา ({searchResults.length} รายการ)
+              </h2>
+              {selectedProduct && (
+                <p className="mt-1 text-sm text-gray-500">
+                  สินค้า: {selectedProduct.name} ({selectedProduct.id}) | ช่วงวันที่ {fromDate} ถึง {toDate}
+                </p>
+              )}
+            </div>
             <Button
               onClick={handleExport}
               variant="outline"
@@ -276,6 +356,23 @@ export function PriceSearch() {
               ส่งออก CSV
             </Button>
           </div>
+
+          {resultSummary && (
+            <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Card className="border-blue-100 p-4">
+                <p className="text-sm text-gray-500">ราคาเฉลี่ย</p>
+                <p className="text-xl font-semibold text-gray-900">{currencyFormatter.format(resultSummary.average)}</p>
+              </Card>
+              <Card className="border-blue-100 p-4">
+                <p className="text-sm text-gray-500">ราคาต่ำสุด</p>
+                <p className="text-xl font-semibold text-gray-900">{currencyFormatter.format(resultSummary.lowest)}</p>
+              </Card>
+              <Card className="border-blue-100 p-4">
+                <p className="text-sm text-gray-500">ราคาสูงสุด</p>
+                <p className="text-xl font-semibold text-gray-900">{currencyFormatter.format(resultSummary.highest)}</p>
+              </Card>
+            </div>
+          )}
 
           {searchResults.length > 0 ? (
             <div className="overflow-x-auto">
@@ -295,7 +392,9 @@ export function PriceSearch() {
                       <TableCell className="font-medium">{item.product_name}</TableCell>
                       <TableCell>{item.market_name || "MOC Realtime"}</TableCell>
                       <TableCell className="text-right font-semibold">
-                        ฿{(item.avg_price ?? item.min_price ?? item.max_price)?.toFixed(2) || "N/A"}
+                        {typeof (item.avg_price ?? item.min_price ?? item.max_price) === "number"
+                          ? currencyFormatter.format(item.avg_price ?? item.min_price ?? item.max_price ?? 0)
+                          : "N/A"}
                       </TableCell>
                       <TableCell>{item.unit || "กก."}</TableCell>
                       <TableCell>{item.date}</TableCell>

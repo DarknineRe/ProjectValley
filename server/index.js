@@ -136,8 +136,8 @@ async function getRealtimePrice(productId, fromDate, toDate) {
     return normalized;
 }
 
-async function getTrackedMarketProducts(limit = 30) {
-    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 92) : 30;
+async function getTrackedMarketProducts(limit = 300) {
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 2000) : 300;
     if (realtimeCatalogCache.expiresAt > Date.now() && realtimeCatalogCache.products.length > 0) {
         return realtimeCatalogCache.products.slice(0, safeLimit);
     }
@@ -152,7 +152,7 @@ async function getTrackedMarketProducts(limit = 30) {
 
     let catalog = [];
     try {
-        catalog = await fetchProductCatalog(120);
+        catalog = await fetchProductCatalog(2000);
     } catch {
         catalog = [];
     }
@@ -1889,7 +1889,7 @@ app.post('/api/activity-logs/:id/rollback', async (req, res) => {
 app.get('/api/market-prices/products', async (req, res) => {
     try {
         const limit = Number(req.query.limit || 200);
-        const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 200;
+        const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 2000) : 200;
         const products = await getTrackedMarketProducts(safeLimit);
 
         res.json(
