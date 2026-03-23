@@ -5,7 +5,10 @@ import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Search, Store, Package2, Users, Filter, Edit, Trash2 } from "lucide-react";
+import { Textarea } from "../components/ui/textarea";
+import { Label } from "../components/ui/label";
+import { Skeleton } from "../components/ui/skeleton";
+import { Search, Store, Package2, Users, Filter, Edit, Trash2, MessageSquarePlus } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { EditProductDialog } from "../components/edit-product-dialog";
 import { toast } from "sonner";
@@ -20,6 +23,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../components/ui/dialog";
 
 const priceFormatter = new Intl.NumberFormat("th-TH", {
   style: "currency",
@@ -57,6 +67,9 @@ export function Marketplace() {
   const [categoryFilter, setCategoryFilter] = useState<string>("ทั้งหมด");
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const [requestingProduct, setRequestingProduct] = useState<Product | null>(null);
+  const [requestMessage, setRequestMessage] = useState("");
+  const [isSendingRequest, setIsSendingRequest] = useState(false);
 
   // Fetch all products from all workspaces
   useEffect(() => {
@@ -118,8 +131,7 @@ export function Marketplace() {
         const matchesSearch =
           product.name.toLowerCase().includes(q) ||
           product.category.toLowerCase().includes(q) ||
-          product.sellerName.toLowerCase().includes(q) ||
-          product.workspace_name?.toLowerCase().includes(q);
+          product.sellerName.toLowerCase().includes(q);
         const matchesCategory =
           categoryFilter === "ทั้งหมด" || product.category === categoryFilter;
         return matchesSearch && matchesCategory;
@@ -175,15 +187,75 @@ export function Marketplace() {
     }
   };
 
+  const handleSendRequest = async () => {
+    if (!requestingProduct || !user || !requestMessage.trim()) return;
+    setIsSendingRequest(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/item-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: requestingProduct.id,
+          productName: requestingProduct.name,
+          requesterId: user.id,
+          requesterName: user.name,
+          requesterEmail: user.email,
+          sellerId: requestingProduct.sellerId,
+          sellerName: requestingProduct.sellerName,
+          message: requestMessage.trim(),
+        }),
+      });
+      if (res.ok) {
+        toast.success("ส่งคำขอแก้ไขข้อมูลเรียบร้อยแล้ว");
+        setRequestingProduct(null);
+        setRequestMessage("");
+      } else {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || "ไม่สามารถส่งคำขอได้");
+      }
+    } catch {
+      toast.error("เกิดข้อผิดพลาดในการส่งคำขอ");
+    } finally {
+      setIsSendingRequest(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-8">
         <section className="rounded-2xl border bg-white px-6 py-8 md:px-10">
-          <div className="relative">
-            <p className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">กำลังโหลด...</p>
-            <h2 className="text-3xl font-semibold text-slate-900 md:text-4xl">ตลาดกลาง</h2>
-            <p className="mt-2 text-slate-600">กำลังโหลดข้อมูลสินค้าจากทั้งระบบ กรุณารอสักครู่...</p>
-          </div>
+          <Skeleton className="mb-2 h-3 w-24" />
+          <Skeleton className="h-9 w-64 mt-2" />
+          <Skeleton className="h-4 w-96 mt-3" />
+        </section>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <Card key={i} className="border-neutral-200 p-5">
+              <div className="flex items-center justify-between">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-8 w-16" />
+                </div>
+                <Skeleton className="h-6 w-6 rounded-full" />
+              </div>
+            </Card>
+          ))}
+        </div>
+        <Card className="border-neutral-200 p-6">
+          <Skeleton className="h-10 w-full" />
+        </Card>
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Card key={i} className="overflow-hidden border-neutral-200 p-0">
+              <Skeleton className="h-48 w-full" />
+              <div className="space-y-3 p-4">
+                <Skeleton className="h-5 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-8 w-24 mt-2" />
+              </div>
+            </Card>
+          ))}
         </section>
       </div>
     );
@@ -196,7 +268,7 @@ export function Marketplace() {
           <p className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Marketplace</p>
           <h2 className="text-3xl font-semibold text-slate-900 md:text-4xl">ค้นหาและเปรียบเทียบสินค้าจากทุก Workspace</h2>
           <p className="mt-3 max-w-3xl text-sm text-slate-600 md:text-base">
-            ดูราคาสินค้า ชื่อผู้ขาย จำนวนคงเหลือ และ Workspace ต้นทางได้ในหน้าเดียว พร้อมค้นหาและกรองรายการได้ทันที
+            ดูราคาสินค้า ชื่อผู้ขาย และจำนวนคงเหลือได้ในหน้าเดียว ค้นหา กรอง และส่งคำขอแก้ไขข้อมูลสินค้าได้ทันที
           </p>
         </div>
       </section>
@@ -238,7 +310,7 @@ export function Marketplace() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="ค้นหาตามชื่อสินค้า หมวดหมู่ ผู้ขาย หรือชื่อ Workspace"
+              placeholder="ค้นหาตามชื่อสินค้า หมวดหมู่ หรือผู้ขาย"
               className="pl-10"
             />
           </div>
@@ -325,7 +397,6 @@ export function Marketplace() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">{offer.workspace_name}</Badge>
                   {offer.quantity <= offer.minStock && offer.minStock > 0 && (
                     <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">สต็อกใกล้หมด</Badge>
                   )}
@@ -345,7 +416,7 @@ export function Marketplace() {
                   {offer.sellerId === user?.id && <Badge variant="secondary">สินค้าของฉัน</Badge>}
                 </div>
 
-                {canManageOffer(offer.sellerId) && (
+                {canManageOffer(offer.sellerId) ? (
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <Button
                       type="button"
@@ -365,6 +436,16 @@ export function Marketplace() {
                       ลบ
                     </Button>
                   </div>
+                ) : user && offer.sellerId !== user.id && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full mt-1"
+                    onClick={() => { setRequestingProduct(offer); setRequestMessage(""); }}
+                  >
+                    <MessageSquarePlus className="mr-1 h-3.5 w-3.5" />
+                    ขอแก้ไขข้อมูล
+                  </Button>
                 )}
               </div>
             </Card>
@@ -407,6 +488,38 @@ export function Marketplace() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!requestingProduct} onOpenChange={(open) => { if (!open) { setRequestingProduct(null); setRequestMessage(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ขอแก้ไขข้อมูลสินค้า</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-gray-600">
+              สินค้า: <span className="font-semibold text-gray-900">{requestingProduct?.name}</span>
+            </p>
+            <p className="text-sm text-gray-600">
+              ผู้ขาย: {requestingProduct?.sellerName}
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="request-message">ข้อความถึงผู้ขาย</Label>
+              <Textarea
+                id="request-message"
+                placeholder="ระบุรายละเอียดที่ต้องการให้แก้ไข เช่น ราคา จำนวน หรือข้อมูลอื่นๆ"
+                rows={4}
+                value={requestMessage}
+                onChange={(e) => setRequestMessage(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRequestingProduct(null); setRequestMessage(""); }}>ยกเลิก</Button>
+            <Button onClick={handleSendRequest} disabled={isSendingRequest || !requestMessage.trim()}>
+              {isSendingRequest ? "กำลังส่ง..." : "ส่งคำขอ"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const pool = require('./db');
+const nodemailer = require('nodemailer');
 const { fetchMarketPrice, fetchProductCatalog } = require('./market-price-service');
 
 const app = express();
@@ -2190,6 +2191,103 @@ app.post('/api/market-prices/maintenance/repair', async (req, res) => {
     res.status(410).json({
         error: 'Market price maintenance endpoint has been removed. Data is now fetched in real-time.',
     });
+});
+
+// --- Item Change Requests ---
+
+function createMailTransport() {
+    const host = process.env.SMTP_HOST;
+    const port = parseInt(process.env.SMTP_PORT || '587', 10);
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    if (!host || !user || !pass) return null;
+    return nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+}
+
+async function sendChangeRequestEmail({ sellerEmail, sellerName, requesterName, requesterEmail, productName, message }) {
+    const transport = createMailTransport();
+    if (!transport) return; // email not configured, skip silently
+    const fromAddr = process.env.SMTP_FROM || process.env.SMTP_USER;
+    await transport.sendMail({
+        from: `"ProjectValley" <${fromAddr}>`,
+        to: sellerEmail,
+        subject: `คำขอแก้ไขข้อมูลสินค้า: ${productName}`,
+        text: [
+            `สวัสดีคุณ ${sellerName},`,
+            ``,
+            `คุณ ${requesterName} (${requesterEmail}) ได้ส่งคำขอแก้ไขข้อมูลสำหรับสินค้า "${productName}"`,
+            ``,
+            `ข้อความ:`,
+            message,
+            ``,
+            `กรุณาเข้าสู่ระบบ ProjectValley เพื่อตรวจสอบและตอบรับคำขอ`,
+        ].join('\n'),
+    });
+}
+
+// POST /api/item-requests  — submit a change request
+app.post('/api/item-requests', async (req, res) => {
+    try {
+        const { productId, productName, requesterId, requesterName, requesterEmail, sellerId, sellerName, sellerEmail, message } = req.body;
+        if (!productId || !requesterId || !sellerId || !String(message || '').trim()) {
+            return res.status(400).json({ error: 'productId, requesterId, sellerId and message are required' });
+        }
+        const id = Date.now().toString();
+        await pool.query(
+            `INSERT INTO item_change_requests
+                (id, product_id, product_name, requester_id, requester_name, requester_email, seller_id, seller_name, seller_email, message)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [id, productId, productName, requesterId, requesterName, requesterEmail, sellerId, sellerName, sellerEmail || null, message]
+        );
+        // fire-and-forget email
+        if (sellerEmail) {
+            sendChangeRequestEmail({ sellerEmail, sellerName, requesterName, requesterEmail, productName, message }).catch(() => {});
+        }
+        res.json({ id, status: 'pending' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/item-requests?seller_id=X  — requests for a seller
+// GET /api/item-requests?requester_id=X  — requests submitted by user
+// GET /api/item-requests  (admin) — all requests
+app.get('/api/item-requests', async (req, res) => {
+    try {
+        const { seller_id, requester_id } = req.query;
+        let sql = 'SELECT * FROM item_change_requests';
+        const params = [];
+        if (seller_id) {
+            sql += ' WHERE seller_id = $1';
+            params.push(String(seller_id));
+        } else if (requester_id) {
+            sql += ' WHERE requester_id = $1';
+            params.push(String(requester_id));
+        }
+        sql += ' ORDER BY created_at DESC';
+        const { rows } = await pool.query(sql, params);
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/item-requests/:id  — update status (pending/accepted/rejected)
+app.patch('/api/item-requests/:id', async (req, res) => {
+    try {
+        const { status } = req.body;
+        if (!['pending', 'accepted', 'rejected'].includes(status)) {
+            return res.status(400).json({ error: 'status must be pending, accepted or rejected' });
+        }
+        const { rows } = await pool.query(
+            `UPDATE item_change_requests SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+            [status, req.params.id]
+        );
+        if (rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+        res.json(rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // --- Start Server ---

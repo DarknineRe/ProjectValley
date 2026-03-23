@@ -9,8 +9,9 @@
     },
     "dependencies": {
         "cors": "^2.8.5",
+        "dotenv": "^16.0.3",
         "express": "^4.21.2",
-        "pg": "^8.10.0",
-        "dotenv": "^16.0.3"
+        "nodemailer": "^6.10.1",
+        "pg": "^8.10.0"
     }
 }

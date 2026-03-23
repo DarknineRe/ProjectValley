@@ -370,6 +370,24 @@ async function initializeDatabase() {
             ALTER COLUMN timestamp TYPE TIMESTAMP USING timestamp::timestamp;
         `);
 
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS item_change_requests (
+                id VARCHAR(255) PRIMARY KEY,
+                product_id VARCHAR(255) NOT NULL,
+                product_name VARCHAR(255) NOT NULL,
+                requester_id VARCHAR(255) NOT NULL,
+                requester_name VARCHAR(255) NOT NULL,
+                requester_email VARCHAR(255) NOT NULL,
+                seller_id VARCHAR(255) NOT NULL,
+                seller_name VARCHAR(255) NOT NULL,
+                seller_email VARCHAR(255),
+                message TEXT NOT NULL,
+                status VARCHAR(50) NOT NULL DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
         console.log('Database tables created/verified successfully.');
         await seedData(client);
         client.release();

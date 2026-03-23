@@ -11,6 +11,7 @@ import { Register } from "./pages/register";
 import { Hub } from "./pages/hub";
 import { Profile } from "./pages/profile";
 import { PriceSearch } from "./pages/price-search";
+import { Requests } from "./pages/requests";
 
 export const router = createBrowserRouter([
   {
@@ -49,6 +50,7 @@ export const router = createBrowserRouter([
       { path: "calendar", Component: PlantingCalendar },
       { path: "members", Component: Members },
       { path: "activity", Component: ActivityLog },
+      { path: "requests", Component: Requests },
     ],
   },
   {
