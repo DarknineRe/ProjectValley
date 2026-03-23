@@ -8,7 +8,7 @@ import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
 import { Skeleton } from "../components/ui/skeleton";
-import { Search, Store, Package2, Users, Filter, Edit, Trash2, MessageSquarePlus } from "lucide-react";
+import { Search, Store, Package2, Users, Filter, Edit, Trash2, MessageSquarePlus, Check, X } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { EditProductDialog } from "../components/edit-product-dialog";
 import { toast } from "sonner";
@@ -56,11 +56,25 @@ export interface Product {
   lastUpdated: Date;
   workspace_id?: string;
   workspace_name?: string;
+  workspace_owner_id?: string;
+  workspace_owner_name?: string;
+  workspace_owner_email?: string;
+}
+
+interface ItemChangeRequest {
+  id: string;
+  product_id: string;
+  product_name: string;
+  request_type: "delete" | "decrease";
+  decrease_by: number | null;
+  requester_name: string;
+  message: string;
+  status: "pending" | "accepted" | "rejected";
 }
 
 export function Marketplace() {
   const { user } = useAuth();
-  const { isGlobalAdmin, getUserRole, getUserPermissions } = useWorkspace();
+  const { isGlobalAdmin } = useWorkspace();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -69,7 +83,11 @@ export function Marketplace() {
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
   const [requestingProduct, setRequestingProduct] = useState<Product | null>(null);
   const [requestMessage, setRequestMessage] = useState("");
+  const [requestType, setRequestType] = useState<"delete" | "decrease">("delete");
+  const [decreaseBy, setDecreaseBy] = useState<string>("");
   const [isSendingRequest, setIsSendingRequest] = useState(false);
+  const [ownerRequests, setOwnerRequests] = useState<ItemChangeRequest[]>([]);
+  const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null);
 
   // Fetch all products from all workspaces
   useEffect(() => {
@@ -90,13 +108,16 @@ export function Marketplace() {
             unit: p.unit ?? 'หน่วย',
             price: Number(p.price ?? 0),
             imageUrl: p.image_url ?? p.imageUrl,
-            sellerId: p.seller_id ?? p.sellerId ?? 'legacy',
-            sellerName: p.seller_name ?? p.sellerName ?? 'ไม่ระบุผู้ขาย',
+            sellerId: p.workspace_owner_id ?? p.workspaceOwnerId ?? p.seller_id ?? p.sellerId ?? 'legacy',
+            sellerName: p.workspace_owner_name ?? p.workspaceOwnerName ?? p.seller_name ?? p.sellerName ?? 'ไม่ระบุผู้ขาย',
             minStock: p.minstock ?? p.minStock ?? 0,
             harvestDate: p.harvestdate ? new Date(p.harvestdate) : p.harvestDate ? new Date(p.harvestDate) : undefined,
             lastUpdated: p.lastupdated ? new Date(p.lastupdated) : p.lastUpdated ? new Date(p.lastUpdated) : new Date(),
             workspace_id: p.workspace_id,
-            workspace_name: p.workspace_name ?? 'ไม่ระบุ Workspace'
+            workspace_name: p.workspace_name ?? 'ไม่ระบุ Workspace',
+            workspace_owner_id: p.workspace_owner_id,
+            workspace_owner_name: p.workspace_owner_name,
+            workspace_owner_email: p.workspace_owner_email,
           })));
         } else {
           const errorText = await res.text();
@@ -114,8 +135,21 @@ export function Marketplace() {
     loadAllProducts();
   }, []);
 
-  const userRole = getUserRole();
-  const permissions = getUserPermissions();
+  useEffect(() => {
+    const loadOwnerRequests = async () => {
+      if (!user?.id) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/item-requests?seller_id=${encodeURIComponent(user.id)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setOwnerRequests((Array.isArray(data) ? data : []).filter((r) => r.status === "pending"));
+      } catch {
+        // Keep marketplace usable even if request list fails.
+      }
+    };
+    loadOwnerRequests();
+  }, [user?.id]);
+
   const selectedEditingProduct =
     editingProductId ? products.find((product) => product.id === editingProductId) || null : null;
 
@@ -154,8 +188,6 @@ export function Marketplace() {
   const hasActiveFilters = search.trim().length > 0 || categoryFilter !== "ทั้งหมด";
 
   const canManageOffer = (sellerId: string) => {
-    if (!permissions.canEdit) return false;
-    if (isGlobalAdmin || userRole === "owner") return true;
     return sellerId === user?.id;
   };
 
@@ -189,6 +221,11 @@ export function Marketplace() {
 
   const handleSendRequest = async () => {
     if (!requestingProduct || !user || !requestMessage.trim()) return;
+    const decreaseAmount = Number(decreaseBy || 0);
+    if (requestType === "decrease" && (!Number.isFinite(decreaseAmount) || decreaseAmount <= 0)) {
+      toast.error("กรุณาระบุจำนวนที่ต้องการลดให้มากกว่า 0");
+      return;
+    }
     setIsSendingRequest(true);
     try {
       const res = await fetch(`${API_BASE}/api/item-requests`, {
@@ -202,13 +239,18 @@ export function Marketplace() {
           requesterEmail: user.email,
           sellerId: requestingProduct.sellerId,
           sellerName: requestingProduct.sellerName,
+          sellerEmail: requestingProduct.workspace_owner_email,
+          requestType,
+          decreaseBy: requestType === "decrease" ? decreaseAmount : null,
           message: requestMessage.trim(),
         }),
       });
       if (res.ok) {
-        toast.success("ส่งคำขอแก้ไขข้อมูลเรียบร้อยแล้ว");
+        toast.success("ส่งคำขอถึงเจ้าของ Workspace เรียบร้อยแล้ว");
         setRequestingProduct(null);
         setRequestMessage("");
+        setRequestType("delete");
+        setDecreaseBy("");
       } else {
         const data = await res.json().catch(() => null);
         toast.error(data?.error || "ไม่สามารถส่งคำขอได้");
@@ -217,6 +259,46 @@ export function Marketplace() {
       toast.error("เกิดข้อผิดพลาดในการส่งคำขอ");
     } finally {
       setIsSendingRequest(false);
+    }
+  };
+
+  const handleRequestDecision = async (requestId: string, status: "accepted" | "rejected") => {
+    setUpdatingRequestId(requestId);
+    try {
+      const res = await fetch(`${API_BASE}/api/item-requests/${requestId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        setOwnerRequests((prev) => prev.filter((r) => r.id !== requestId));
+        toast.success(status === "accepted" ? "ยืนยันคำขอเรียบร้อยแล้ว" : "ปฏิเสธคำขอเรียบร้อยแล้ว");
+        if (status === "accepted") {
+          setProducts((prev) => prev.filter((product) => {
+            const req = ownerRequests.find((r) => r.id === requestId);
+            if (!req) return true;
+            if (req.request_type === "delete") {
+              return product.id !== req.product_id;
+            }
+            return true;
+          }).map((product) => {
+            const req = ownerRequests.find((r) => r.id === requestId);
+            if (!req || req.request_type !== "decrease" || product.id !== req.product_id) {
+              return product;
+            }
+            return {
+              ...product,
+              quantity: Math.max(0, product.quantity - Number(req.decrease_by || 0)),
+            };
+          }));
+        }
+      } else {
+        toast.error("ไม่สามารถอัปเดตคำขอได้");
+      }
+    } catch {
+      toast.error("เกิดข้อผิดพลาดในการอัปเดตคำขอ");
+    } finally {
+      setUpdatingRequestId(null);
     }
   };
 
@@ -265,13 +347,55 @@ export function Marketplace() {
     <div className="space-y-8">
       <section className="rounded-2xl border bg-white px-6 py-8 md:px-10">
         <div className="relative">
-          <p className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Marketplace</p>
-          <h2 className="text-3xl font-semibold text-slate-900 md:text-4xl">ค้นหาและเปรียบเทียบสินค้าจากทุก Workspace</h2>
-          <p className="mt-3 max-w-3xl text-sm text-slate-600 md:text-base">
-            ดูราคาสินค้า ชื่อผู้ขาย และจำนวนคงเหลือได้ในหน้าเดียว ค้นหา กรอง และส่งคำขอแก้ไขข้อมูลสินค้าได้ทันที
+          <p className="mb-2 text-xs uppercase tracking-[0.2em] text-green-600">Marketplace</p>
+          <h2 className="text-3xl font-semibold text-green-900 md:text-4xl">ตลาดกลางสินค้า</h2>
+          <p className="mt-3 max-w-3xl text-sm text-green-700 md:text-base">
+            ผู้ดูแลระบบต้องส่งคำขอให้เจ้าของ Workspace ยืนยันก่อนลบหรือลดจำนวนสินค้า
           </p>
         </div>
       </section>
+
+      {ownerRequests.length > 0 && (
+        <Card className="border-green-200 bg-green-50 p-5">
+          <h3 className="text-lg font-semibold text-green-900">คำขอรอการยืนยันของคุณ</h3>
+          <p className="mt-1 text-sm text-green-700">ผู้ดูแลระบบส่งคำขอให้คุณยืนยันก่อนเปลี่ยนสินค้า</p>
+          <div className="mt-4 space-y-3">
+            {ownerRequests.map((req) => (
+              <div key={req.id} className="rounded-lg border border-green-200 bg-white p-4">
+                <p className="font-semibold text-gray-900">{req.product_name}</p>
+                <p className="text-sm text-green-800 mt-1">
+                  {req.request_type === "delete"
+                    ? "ขอลบรายการสินค้า"
+                    : `ขอลดจำนวนสินค้า ${Number(req.decrease_by || 0).toLocaleString("th-TH")}`}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">ผู้ส่งคำขอ: {req.requester_name}</p>
+                <p className="text-sm text-gray-600 mt-1">เหตุผล: {req.message}</p>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700"
+                    disabled={updatingRequestId === req.id}
+                    onClick={() => handleRequestDecision(req.id, "accepted")}
+                  >
+                    <Check className="mr-1 h-3.5 w-3.5" />
+                    ยืนยัน
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-red-600 hover:text-red-700"
+                    disabled={updatingRequestId === req.id}
+                    onClick={() => handleRequestDecision(req.id, "rejected")}
+                  >
+                    <X className="mr-1 h-3.5 w-3.5" />
+                    ปฏิเสธ
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card className="border-neutral-200 p-5">
@@ -280,7 +404,7 @@ export function Marketplace() {
               <p className="text-sm text-gray-600">รายการสินค้าทั้งหมด</p>
               <p className="text-3xl font-bold text-gray-900">{summary.offers}</p>
             </div>
-            <Store className="h-6 w-6 text-slate-700" />
+            <Store className="h-6 w-6 text-green-700" />
           </div>
         </Card>
         <Card className="border-neutral-200 p-5">
@@ -289,7 +413,7 @@ export function Marketplace() {
               <p className="text-sm text-gray-600">ผู้ขายทั้งหมด</p>
               <p className="text-3xl font-bold text-gray-900">{summary.sellers}</p>
             </div>
-            <Users className="h-6 w-6 text-slate-700" />
+            <Users className="h-6 w-6 text-green-700" />
           </div>
         </Card>
         <Card className="border-neutral-200 p-5">
@@ -298,7 +422,7 @@ export function Marketplace() {
               <p className="text-sm text-gray-600">หมวดหมู่</p>
               <p className="text-3xl font-bold text-gray-900">{summary.categories}</p>
             </div>
-            <Package2 className="h-6 w-6 text-slate-700" />
+            <Package2 className="h-6 w-6 text-green-700" />
           </div>
         </Card>
       </div>
@@ -322,7 +446,7 @@ export function Marketplace() {
                   key={category}
                   type="button"
                   variant={isActive ? "default" : "outline"}
-                  className={isActive ? "bg-slate-900 hover:bg-slate-800" : ""}
+                  className={isActive ? "bg-green-600 hover:bg-green-700" : ""}
                   onClick={() => setCategoryFilter(category)}
                 >
                   <Filter className="mr-2 h-4 w-4" />
@@ -410,7 +534,7 @@ export function Marketplace() {
 
                 <div className="flex items-end justify-between">
                   <div>
-                    <p className="text-2xl font-bold text-slate-900">{priceFormatter.format(offer.price)}</p>
+                    <p className="text-2xl font-bold text-green-800">{priceFormatter.format(offer.price)}</p>
                     <p className="text-xs text-gray-500">ต่อ {offer.unit}</p>
                   </div>
                   {offer.sellerId === user?.id && <Badge variant="secondary">สินค้าของฉัน</Badge>}
@@ -436,15 +560,20 @@ export function Marketplace() {
                       ลบ
                     </Button>
                   </div>
-                ) : user && offer.sellerId !== user.id && (
+                ) : user && isGlobalAdmin && offer.sellerId !== user.id && (
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full mt-1"
-                    onClick={() => { setRequestingProduct(offer); setRequestMessage(""); }}
+                    className="w-full mt-1 border-green-300 text-green-700 hover:bg-green-50"
+                    onClick={() => {
+                      setRequestingProduct(offer);
+                      setRequestMessage("");
+                      setRequestType("delete");
+                      setDecreaseBy("");
+                    }}
                   >
                     <MessageSquarePlus className="mr-1 h-3.5 w-3.5" />
-                    ขอแก้ไขข้อมูล
+                    ส่งคำขอถึงเจ้าของ
                   </Button>
                 )}
               </div>
@@ -489,23 +618,60 @@ export function Marketplace() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={!!requestingProduct} onOpenChange={(open) => { if (!open) { setRequestingProduct(null); setRequestMessage(""); } }}>
+      <Dialog
+        open={!!requestingProduct}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRequestingProduct(null);
+            setRequestMessage("");
+            setRequestType("delete");
+            setDecreaseBy("");
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>ขอแก้ไขข้อมูลสินค้า</DialogTitle>
+            <DialogTitle>คำขอผู้ดูแลระบบถึงเจ้าของ Workspace</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-sm text-gray-600">
               สินค้า: <span className="font-semibold text-gray-900">{requestingProduct?.name}</span>
             </p>
             <p className="text-sm text-gray-600">
-              ผู้ขาย: {requestingProduct?.sellerName}
+              เจ้าของสินค้า: {requestingProduct?.sellerName}
             </p>
             <div className="space-y-1.5">
-              <Label htmlFor="request-message">ข้อความถึงผู้ขาย</Label>
+              <Label htmlFor="request-type">ประเภทคำขอ</Label>
+              <select
+                id="request-type"
+                aria-label="ประเภทคำขอ"
+                title="ประเภทคำขอ"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                value={requestType}
+                onChange={(e) => setRequestType(e.target.value as "delete" | "decrease")}
+              >
+                <option value="delete">ขอลบรายการสินค้า</option>
+                <option value="decrease">ขอลดจำนวนสินค้า</option>
+              </select>
+            </div>
+            {requestType === "decrease" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="decrease-by">จำนวนที่ต้องการลด</Label>
+                <Input
+                  id="decrease-by"
+                  type="number"
+                  min={1}
+                  value={decreaseBy}
+                  onChange={(e) => setDecreaseBy(e.target.value)}
+                  placeholder="เช่น 10"
+                />
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="request-message">เหตุผลและรายละเอียด</Label>
               <Textarea
                 id="request-message"
-                placeholder="ระบุรายละเอียดที่ต้องการให้แก้ไข เช่น ราคา จำนวน หรือข้อมูลอื่นๆ"
+                placeholder="ระบุเหตุผลที่ต้องการให้เจ้าของยืนยันคำขอนี้"
                 rows={4}
                 value={requestMessage}
                 onChange={(e) => setRequestMessage(e.target.value)}
@@ -514,7 +680,7 @@ export function Marketplace() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setRequestingProduct(null); setRequestMessage(""); }}>ยกเลิก</Button>
-            <Button onClick={handleSendRequest} disabled={isSendingRequest || !requestMessage.trim()}>
+            <Button className="bg-green-600 hover:bg-green-700" onClick={handleSendRequest} disabled={isSendingRequest || !requestMessage.trim()}>
               {isSendingRequest ? "กำลังส่ง..." : "ส่งคำขอ"}
             </Button>
           </DialogFooter>

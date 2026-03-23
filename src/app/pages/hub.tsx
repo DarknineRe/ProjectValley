@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
-import { Leaf, LogOut, Users, Code, ChevronRight, Building2, Trash2, Store, Pencil } from "lucide-react";
+import { Leaf, LogOut, Users, Code, ChevronRight, Building2, Trash2, Store, Pencil, Loader2 } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
@@ -44,6 +44,7 @@ export function Hub() {
   const [workspaceNameDraft, setWorkspaceNameDraft] = useState("");
   const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
   const [isRenamingWorkspace, setIsRenamingWorkspace] = useState(false);
+  const [isEnteringWorkspace, setIsEnteringWorkspace] = useState(false);
   const isAdmin = isGlobalAdmin;
   const visibleWorkspaces = isAdmin ? workspaces : workspaces.slice(0, 1);
 
@@ -60,8 +61,9 @@ export function Hub() {
   }
 
   const handleSelectWorkspace = (workspace: Workspace) => {
+    setIsEnteringWorkspace(true);
     setCurrentWorkspace(workspace);
-    navigate(isAdmin ? "/workspace/marketplace" : "/workspace/inventory");
+    navigate("/workspace/marketplace");
   };
 
   const handleDeleteWorkspace = async () => {
@@ -140,6 +142,15 @@ export function Hub() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50">
+      {isEnteringWorkspace && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/75 backdrop-blur-sm">
+          <div className="flex items-center gap-3 rounded-xl border bg-white px-5 py-4 shadow-sm">
+            <Loader2 className="h-5 w-5 animate-spin text-green-600" />
+            <span className="text-sm font-medium text-green-800">กำลังเข้า Workspace...</span>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="bg-white border-b shadow-sm">
         <div className="container mx-auto px-4 py-4">

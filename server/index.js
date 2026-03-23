@@ -1458,7 +1458,17 @@ app.get('/api/products', async (req, res) => {
     try {
         const workspaceId = requireWorkspaceId(req, res);
         if (!workspaceId) return;
-        const { rows } = await pool.query('SELECT * FROM products WHERE workspace_id = $1', [workspaceId]);
+        const { rows } = await pool.query(
+            `SELECT
+                p.*,
+                COALESCE(owner.id::text, p.seller_id::text) AS seller_id,
+                COALESCE(owner.name, p.seller_name) AS seller_name
+             FROM products p
+             LEFT JOIN workspaces w ON w.id = p.workspace_id
+             LEFT JOIN users owner ON owner.id::text = w.owner_id::text
+             WHERE p.workspace_id = $1`,
+            [workspaceId]
+        );
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1470,9 +1480,15 @@ app.get('/api/public/products', async (req, res) => {
         const { rows } = await pool.query(`
             SELECT
                 p.*,
-                w.name AS workspace_name
+                COALESCE(owner.id::text, p.seller_id::text) AS seller_id,
+                COALESCE(owner.name, p.seller_name) AS seller_name,
+                w.name AS workspace_name,
+                owner.id::text AS workspace_owner_id,
+                owner.name AS workspace_owner_name,
+                owner.email AS workspace_owner_email
             FROM products p
             LEFT JOIN workspaces w ON w.id = p.workspace_id
+            LEFT JOIN users owner ON owner.id::text = w.owner_id::text
             WHERE p.quantity > 0
             ORDER BY COALESCE(w.name, 'ทั่วไป') ASC, p.lastUpdated DESC
         `);
@@ -1488,9 +1504,15 @@ app.get('/api/admin/all-products', async (req, res) => {
         const { rows } = await pool.query(`
             SELECT
                 p.*,
-                w.name AS workspace_name
+                COALESCE(owner.id::text, p.seller_id::text) AS seller_id,
+                COALESCE(owner.name, p.seller_name) AS seller_name,
+                w.name AS workspace_name,
+                owner.id::text AS workspace_owner_id,
+                owner.name AS workspace_owner_name,
+                owner.email AS workspace_owner_email
             FROM products p
             LEFT JOIN workspaces w ON w.id = p.workspace_id
+            LEFT JOIN users owner ON owner.id::text = w.owner_id::text
             ORDER BY COALESCE(w.name, 'ทั่วไป') ASC, p.lastUpdated DESC
         `);
         res.json(rows);
@@ -1516,6 +1538,21 @@ app.post('/api/products', async (req, res) => {
             harvestDate,
             lastUpdated,
         } = req.body;
+
+        const ownerResult = await pool.query(
+            `SELECT u.id::text AS owner_id, u.name AS owner_name
+             FROM workspaces w
+             LEFT JOIN users u ON u.id::text = w.owner_id::text
+             WHERE w.id = $1
+             LIMIT 1`,
+            [workspaceId]
+        );
+        const owner = ownerResult.rows[0] || null;
+        if (owner?.owner_id && owner?.owner_name) {
+            sellerId = owner.owner_id;
+            sellerName = owner.owner_name;
+        }
+
         // enforce non-null minStock; default to 0 if missing or null
         if (minStock === undefined || minStock === null) {
             minStock = 0;
@@ -1589,6 +1626,21 @@ app.put('/api/products/:id', async (req, res) => {
             harvestDate,
             lastUpdated,
         } = req.body;
+
+        const ownerResult = await pool.query(
+            `SELECT u.id::text AS owner_id, u.name AS owner_name
+             FROM workspaces w
+             LEFT JOIN users u ON u.id::text = w.owner_id::text
+             WHERE w.id = $1
+             LIMIT 1`,
+            [workspaceId]
+        );
+        const owner = ownerResult.rows[0] || null;
+        if (owner?.owner_id && owner?.owner_name) {
+            sellerId = owner.owner_id;
+            sellerName = owner.owner_name;
+        }
+
         if (minStock === undefined || minStock === null) {
             minStock = 0;
         }
@@ -2225,19 +2277,77 @@ async function sendChangeRequestEmail({ sellerEmail, sellerName, requesterName, 
     });
 }
 
+async function applyAcceptedRequest(client, requestRow) {
+    const requestType = String(requestRow.request_type || 'delete').toLowerCase();
+    const decreaseBy = Number(requestRow.decrease_by || 0);
+
+    if (requestType === 'delete') {
+        await client.query('DELETE FROM products WHERE id = $1', [requestRow.product_id]);
+        return;
+    }
+
+    if (requestType === 'decrease') {
+        if (!Number.isFinite(decreaseBy) || decreaseBy <= 0) {
+            throw new Error('decrease_by must be a positive number for decrease requests');
+        }
+        await client.query(
+            `UPDATE products
+             SET quantity = GREATEST(0, quantity - $1), lastUpdated = NOW()
+             WHERE id = $2`,
+            [decreaseBy, requestRow.product_id]
+        );
+        return;
+    }
+
+    throw new Error('Unknown request_type');
+}
+
 // POST /api/item-requests  — submit a change request
 app.post('/api/item-requests', async (req, res) => {
     try {
-        const { productId, productName, requesterId, requesterName, requesterEmail, sellerId, sellerName, sellerEmail, message } = req.body;
+        const {
+            productId,
+            productName,
+            requesterId,
+            requesterName,
+            requesterEmail,
+            sellerId,
+            sellerName,
+            sellerEmail,
+            requestType,
+            decreaseBy,
+            message,
+        } = req.body;
         if (!productId || !requesterId || !sellerId || !String(message || '').trim()) {
             return res.status(400).json({ error: 'productId, requesterId, sellerId and message are required' });
+        }
+        const normalizedType = String(requestType || 'delete').toLowerCase();
+        if (!['delete', 'decrease'].includes(normalizedType)) {
+            return res.status(400).json({ error: 'requestType must be delete or decrease' });
+        }
+        const parsedDecreaseBy = Number(decreaseBy || 0);
+        if (normalizedType === 'decrease' && (!Number.isFinite(parsedDecreaseBy) || parsedDecreaseBy <= 0)) {
+            return res.status(400).json({ error: 'decreaseBy must be a positive number' });
         }
         const id = Date.now().toString();
         await pool.query(
             `INSERT INTO item_change_requests
-                (id, product_id, product_name, requester_id, requester_name, requester_email, seller_id, seller_name, seller_email, message)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-            [id, productId, productName, requesterId, requesterName, requesterEmail, sellerId, sellerName, sellerEmail || null, message]
+                (id, product_id, product_name, requester_id, requester_name, requester_email, seller_id, seller_name, seller_email, request_type, decrease_by, message)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            [
+                id,
+                productId,
+                productName,
+                requesterId,
+                requesterName,
+                requesterEmail,
+                sellerId,
+                sellerName,
+                sellerEmail || null,
+                normalizedType,
+                normalizedType === 'decrease' ? parsedDecreaseBy : null,
+                message,
+            ]
         );
         // fire-and-forget email
         if (sellerEmail) {
@@ -2274,19 +2384,43 @@ app.get('/api/item-requests', async (req, res) => {
 
 // PATCH /api/item-requests/:id  — update status (pending/accepted/rejected)
 app.patch('/api/item-requests/:id', async (req, res) => {
+    const client = await pool.connect();
     try {
         const { status } = req.body;
         if (!['pending', 'accepted', 'rejected'].includes(status)) {
             return res.status(400).json({ error: 'status must be pending, accepted or rejected' });
         }
-        const { rows } = await pool.query(
-            `UPDATE item_change_requests SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+
+        await client.query('BEGIN');
+        const existing = await client.query(
+            'SELECT * FROM item_change_requests WHERE id = $1 FOR UPDATE',
+            [req.params.id]
+        );
+        if (existing.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Request not found' });
+        }
+
+        const requestRow = existing.rows[0];
+        if (status === 'accepted' && requestRow.status !== 'accepted') {
+            await applyAcceptedRequest(client, requestRow);
+        }
+
+        const updated = await client.query(
+            `UPDATE item_change_requests
+             SET status = $1, updated_at = NOW()
+             WHERE id = $2
+             RETURNING *`,
             [status, req.params.id]
         );
-        if (rows.length === 0) return res.status(404).json({ error: 'Request not found' });
-        res.json(rows[0]);
+
+        await client.query('COMMIT');
+        res.json(updated.rows[0]);
     } catch (err) {
+        await client.query('ROLLBACK');
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 });
 

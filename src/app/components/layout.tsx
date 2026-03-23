@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
-import { Package, Calendar, BarChart3, Menu, ClipboardList, BarChart2, User, Users, Building2, LogOut, Store, MessageSquarePlus } from "lucide-react";
+import { Package, Menu, User, Building2, LogOut, Store, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 import { useState, useEffect } from "react";
@@ -19,13 +19,6 @@ type RoleMode = "admin" | "merchant" | "buyer";
 
 const navItems = [
   { path: "/workspace/marketplace", label: "ตลาดกลาง", icon: Store, permissionKey: "canView" as const, audience: ["admin", "merchant", "buyer"] as RoleMode[] },
-  { path: "/workspace/inventory", label: "จัดการสต็อก", icon: Package, permissionKey: "viewInventory" as const, audience: ["admin", "merchant"] as RoleMode[] },
-  { path: "/workspace/summary", label: "สรุปสต็อก", icon: BarChart2, permissionKey: "viewSummary" as const, audience: ["admin", "merchant"] as RoleMode[] },
-  { path: "/workspace/price-search", label: "เช็กราคา", icon: BarChart3, permissionKey: "viewPriceComparison" as const, audience: ["admin", "merchant", "buyer"] as RoleMode[] },
-  { path: "/workspace/calendar", label: "ปฏิทินการปลูก", icon: Calendar, permissionKey: "viewCalendar" as const, audience: ["admin", "merchant"] as RoleMode[] },
-  { path: "/workspace/members", label: "สมาชิก", icon: Users, permissionKey: "viewMembers" as const, audience: ["admin"] as RoleMode[] },
-  { path: "/workspace/activity", label: "ประวัติการเปลี่ยนแปลง", icon: ClipboardList, permissionKey: "viewActivity" as const, audience: ["admin", "merchant"] as RoleMode[] },
-  { path: "/workspace/requests", label: "คำขอแก้ไขข้อมูล", icon: MessageSquarePlus, permissionKey: "canView" as const, audience: ["admin", "merchant", "buyer"] as RoleMode[] },
 ];
 
 export function Layout() {
@@ -57,10 +50,10 @@ export function Layout() {
 
   const roleSubtitle =
     roleMode === "buyer"
-      ? "เลือกสินค้า ดูสต็อกของคุณและของผู้ขายคนอื่น แล้วกดซื้อได้ทันที"
+      ? "ดูข้อมูลสินค้าในตลาดกลาง"
       : roleMode === "merchant"
-      ? "จัดการสต็อกของร้านคุณและตั้งราคาเพื่อขาย"
-      : "ดูภาพรวม จัดการผู้ค้า และกำหนดสิทธิ์ผู้ใช้งาน";
+      ? "ดูข้อมูลสินค้าในตลาดกลาง"
+      : "ดูข้อมูลสินค้าในตลาดกลาง";
 
   // Redirect if not authenticated or no workspace
   useEffect(() => {
@@ -68,16 +61,8 @@ export function Layout() {
       navigate("/login");
     } else if (!isLoading && !currentWorkspace) {
       navigate("/hub");
-    } else if (location.pathname === "/workspace/marketplace") {
-      // Allow marketplace access for admins
-      return;
-    } else if (accessibleNavItems.length > 0) {
-      const canAccessCurrent = accessibleNavItems.some(
-        (item) => item.path === location.pathname
-      );
-      if (!canAccessCurrent) {
-        navigate(accessibleNavItems[0].path);
-      }
+    } else if (location.pathname !== "/workspace/marketplace") {
+      navigate("/workspace/marketplace");
     }
   }, [isAuthenticated, isLoading, currentWorkspace, accessibleNavItems, location.pathname, navigate]);
 
@@ -99,7 +84,22 @@ export function Layout() {
       .slice(0, 2);
   };
 
-  if (!isAuthenticated || isLoading || !currentWorkspace) {
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-green-50">
+        <div className="flex items-center gap-3 rounded-xl border bg-white px-5 py-4 shadow-sm">
+          <Loader2 className="h-5 w-5 animate-spin text-green-600" />
+          <span className="text-sm font-medium text-green-800">กำลังโหลดข้อมูล Workspace...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentWorkspace) {
     return null;
   }
 
@@ -115,8 +115,8 @@ export function Layout() {
             onClick={() => setOpen(false)}
             className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
               isActive
-                ? "bg-slate-900 text-white"
-                : "text-gray-700 hover:bg-slate-100"
+                ? "bg-green-600 text-white"
+                : "text-gray-700 hover:bg-green-50"
             }`}
           >
             <Icon className="h-5 w-5" />
@@ -128,7 +128,7 @@ export function Layout() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-green-50">
       {/* Header */}
       <header className="bg-white border-b sticky top-0 z-20">
         <div className="container mx-auto px-4 py-4">
@@ -141,7 +141,7 @@ export function Layout() {
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-64 p-0">
-                  <div className="p-6 border-b bg-slate-900">
+                  <div className="p-6 border-b bg-green-600">
                     <h2 className="text-lg font-bold text-white">เมนู</h2>
                   </div>
                   <nav className="flex flex-col gap-2 p-4">
@@ -150,7 +150,7 @@ export function Layout() {
                 </SheetContent>
               </Sheet>
               
-              <div className="bg-slate-900 p-2 rounded-lg">
+              <div className="bg-green-600 p-2 rounded-lg">
                 <Package className="h-6 w-6 text-white" />
               </div>
               <div>
@@ -171,7 +171,7 @@ export function Layout() {
                 <Badge
                   variant={userRole === "owner" ? "default" : "secondary"}
                   className={
-                    userRole === "owner" ? "bg-slate-900" : "bg-slate-200 text-slate-800"
+                    userRole === "owner" ? "bg-green-600" : "bg-green-100 text-green-800"
                   }
                 >
                   {roleLabel}
@@ -190,11 +190,11 @@ export function Layout() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="flex items-center gap-2 hover:bg-slate-100"
+                    className="flex items-center gap-2 hover:bg-green-50"
                   >
                     <Avatar className="h-8 w-8">
                       <AvatarImage src={user?.photoUrl} />
-                      <AvatarFallback className="bg-slate-200 text-slate-700">
+                      <AvatarFallback className="bg-green-100 text-green-700">
                         {user ? getInitials(user.name) : "U"}
                       </AvatarFallback>
                     </Avatar>

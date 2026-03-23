@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/auth-context";
-import { useWorkspace } from "../context/workspace-context";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -20,6 +19,8 @@ interface ChangeRequest {
   seller_id: string;
   seller_name: string;
   seller_email: string | null;
+  request_type: "delete" | "decrease";
+  decrease_by: number | null;
   message: string;
   status: "pending" | "accepted" | "rejected";
   created_at: string;
@@ -41,7 +42,6 @@ function statusBadge(status: string) {
 
 export function Requests() {
   const { user } = useAuth();
-  const { isGlobalAdmin } = useWorkspace();
 
   const [inboxRequests, setInboxRequests] = useState<ChangeRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<ChangeRequest[]>([]);
@@ -128,10 +128,10 @@ export function Requests() {
     <div className="space-y-8">
       <section className="rounded-2xl border bg-white px-6 py-8 md:px-10">
         <div>
-          <p className="mb-2 text-xs uppercase tracking-[0.2em] text-slate-500">Requests</p>
-          <h2 className="text-3xl font-semibold text-slate-900 md:text-4xl">คำขอแก้ไขข้อมูลสินค้า</h2>
-          <p className="mt-2 text-slate-600">
-            จัดการคำขอที่ได้รับจากผู้ซื้อ หรือดูคำขอที่คุณส่งออกไป
+          <p className="mb-2 text-xs uppercase tracking-[0.2em] text-green-600">Requests</p>
+          <h2 className="text-3xl font-semibold text-green-900 md:text-4xl">คำขอยืนยันการจัดการสินค้า</h2>
+          <p className="mt-2 text-green-700">
+            เจ้าของ Workspace ตรวจสอบและยืนยันคำขอจากผู้ดูแลระบบ
           </p>
         </div>
       </section>
@@ -166,6 +166,9 @@ export function Requests() {
                       </div>
                       <p className="text-sm text-gray-600">
                         จาก: {req.requester_name} ({req.requester_email})
+                      </p>
+                      <p className="text-sm text-green-700">
+                        ประเภทคำขอ: {req.request_type === "delete" ? "ลบรายการสินค้า" : `ลดจำนวนสินค้า ${Number(req.decrease_by || 0).toLocaleString("th-TH")}`}
                       </p>
                       <p className="text-sm text-gray-500">
                         {dateFormatter.format(new Date(req.created_at))}
@@ -221,6 +224,9 @@ export function Requests() {
                     </div>
                     <p className="text-sm text-gray-600">
                       ถึง: {req.seller_name}
+                    </p>
+                    <p className="text-sm text-green-700">
+                      ประเภทคำขอ: {req.request_type === "delete" ? "ลบรายการสินค้า" : `ลดจำนวนสินค้า ${Number(req.decrease_by || 0).toLocaleString("th-TH")}`}
                     </p>
                     <p className="text-sm text-gray-500">
                       {dateFormatter.format(new Date(req.created_at))}

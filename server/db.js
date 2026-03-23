@@ -381,11 +381,25 @@ async function initializeDatabase() {
                 seller_id VARCHAR(255) NOT NULL,
                 seller_name VARCHAR(255) NOT NULL,
                 seller_email VARCHAR(255),
+                request_type VARCHAR(50) NOT NULL DEFAULT 'delete',
+                decrease_by NUMERIC,
                 message TEXT NOT NULL,
                 status VARCHAR(50) NOT NULL DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+        `);
+        await client.query(`
+            ALTER TABLE item_change_requests ADD COLUMN IF NOT EXISTS request_type VARCHAR(50);
+        `);
+        await client.query(`
+            UPDATE item_change_requests SET request_type = 'delete' WHERE request_type IS NULL;
+        `);
+        await client.query(`
+            ALTER TABLE item_change_requests ALTER COLUMN request_type SET NOT NULL;
+        `);
+        await client.query(`
+            ALTER TABLE item_change_requests ADD COLUMN IF NOT EXISTS decrease_by NUMERIC;
         `);
 
         console.log('Database tables created/verified successfully.');
