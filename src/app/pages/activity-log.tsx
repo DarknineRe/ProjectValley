@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useData } from "../context/data-context";
 import { useWorkspace } from "../context/workspace-context";
 import { Card } from "../components/ui/card";
+import { Button } from "../components/ui/button";
 import {
   Table,
   TableBody,
@@ -9,10 +11,21 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import { Badge } from "../components/ui/badge";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
-import { Plus, Edit, Trash2, Clock, Package, Calendar } from "lucide-react";
+import { Plus, Edit, Trash2, Clock, Package, Calendar, RotateCcw } from "lucide-react";
+import type { ActivityLog as ActivityLogType } from "../context/data-context";
 
 // get Thai description for action
 function getActionThaiText(action: string): string {
@@ -52,10 +65,17 @@ export function ActivityLog() {
   const { activityLogs, rollbackActivity } = useData();
   const { getUserPermissions } = useWorkspace();
   const permissions = getUserPermissions();
+  const [pendingRollback, setPendingRollback] = useState<ActivityLogType | null>(null);
+  const [isRollingBack, setIsRollingBack] = useState(false);
 
-  const rollback = async (log: any) => {
-    if (confirm('ต้องการย้อนกลับการกระทำนี้หรือไม่?')) {
-      await rollbackActivity(log);
+  const handleRollbackConfirm = async () => {
+    if (!pendingRollback) return;
+    setIsRollingBack(true);
+    try {
+      await rollbackActivity(pendingRollback);
+    } finally {
+      setIsRollingBack(false);
+      setPendingRollback(null);
     }
   };
 
@@ -248,13 +268,17 @@ export function ActivityLog() {
                             enabled = !!(d?.itemId || d?.item_id) && permissions.canEdit;
                           } catch {}
                           return (
-                            <button
-                              className={`text-sm ${enabled ? 'text-blue-600 hover:underline' : 'text-gray-400 cursor-not-allowed'}`}
-                              onClick={() => enabled && rollback(log)}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className={enabled ? "text-blue-600 hover:text-blue-700 hover:bg-blue-50" : "text-gray-300 cursor-not-allowed"}
+                              onClick={() => enabled && setPendingRollback(log)}
                               disabled={!enabled}
                             >
+                              <RotateCcw className="h-4 w-4 mr-1" />
                               ย้อนกลับ
-                            </button>
+                            </Button>
                           );
                         })()}
                       </TableCell>
@@ -266,6 +290,36 @@ export function ActivityLog() {
           </div>
         )}
       </Card>
+
+      <AlertDialog open={!!pendingRollback} onOpenChange={(open) => { if (!open) setPendingRollback(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>ย้อนกลับการกระทำนี้?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRollback && (
+                <>
+                  ต้องการย้อนกลับ{" "}
+                  <span className="font-semibold">
+                    {pendingRollback.action === "add" ? "การเพิ่ม" : pendingRollback.action === "update" ? "การแก้ไข" : "การลบ"}
+                    {" "}{pendingRollback.itemName}
+                  </span>{" "}
+                  ใช่หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRollingBack}>ยกเลิก</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRollbackConfirm}
+              disabled={isRollingBack}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isRollingBack ? "กำลังย้อนกลับ..." : "ย้อนกลับ"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

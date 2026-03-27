@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 // PostgreSQL configuration. Prefer a single DATABASE_URL if provided,
@@ -419,10 +420,11 @@ async function seedData(client) {
             const initialUsers = [
                 ["สมชาย เกษตรกร", "farmer@example.com", "password123", "farmer"]
             ];
-            for (const user of initialUsers) {
+            for (const [name, email, password, role] of initialUsers) {
+                const hashedPassword = await bcrypt.hash(password, 12);
                 await client.query(
                     'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4)',
-                    user
+                    [name, email, hashedPassword, role]
                 );
             }
             console.log('Seeded users data.');

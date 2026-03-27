@@ -5,10 +5,11 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
-import { User, Mail, Camera, Save, LogOut, ArrowLeft, Leaf } from "lucide-react";
+import { User, Mail, Camera, Save, LogOut, ArrowLeft, Leaf, Phone, KeyRound, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { useNavigate } from "react-router";
+import { useNavigate, Link } from "react-router";
 import { Badge } from "../components/ui/badge";
+import { API_BASE } from "../../api";
 
 export function Profile() {
   const { user, updateProfile, logout } = useAuth();
@@ -19,6 +20,50 @@ export function Profile() {
   const [phone, setPhone] = useState(user?.phone || "");
   const [address, setAddress] = useState(user?.address || "");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Change-password state
+  const [pwStep, setPwStep] = useState<"idle" | "otp" | "new">("idle");
+  const [pwOtp, setPwOtp] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [isPwLoading, setIsPwLoading] = useState(false);
+
+  const handleRequestPasswordOtp = async () => {
+    if (!user?.email) return;
+    setIsPwLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || "เกิดข้อผิดพลาด"); return; }
+      toast.success("ส่ง OTP ไปที่อีเมลแล้ว");
+      if (data.devOtp) toast.info(`OTP ทดสอบ: ${data.devOtp}`);
+      setPwStep("otp");
+    } catch { toast.error("ไม่สามารถเชื่อมต่อได้"); }
+    finally { setIsPwLoading(false); }
+  };
+
+  const handleChangePassword = async () => {
+    if (!pwOtp.trim() || !pwNew || !pwConfirm) { toast.error("กรุณากรอกข้อมูลให้ครบ"); return; }
+    if (pwNew !== pwConfirm) { toast.error("รหัสผ่านไม่ตรงกัน"); return; }
+    if (pwNew.length < 6) { toast.error("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"); return; }
+    setIsPwLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user?.email, otp: pwOtp.trim(), newPassword: pwNew }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || "เกิดข้อผิดพลาด"); return; }
+      toast.success("เปลี่ยนรหัสผ่านสำเร็จ!");
+      setPwStep("idle"); setPwOtp(""); setPwNew(""); setPwConfirm("");
+    } catch { toast.error("ไม่สามารถเชื่อมต่อได้"); }
+    finally { setIsPwLoading(false); }
+  };
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -188,10 +233,10 @@ export function Profile() {
                 <div className="space-y-2">
                   <Label htmlFor="phone">เบอร์โทรศัพท์</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
                       id="phone"
-                      type="text"
+                      type="tel"
                       placeholder="08x-xxx-xxxx"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
@@ -269,20 +314,111 @@ export function Profile() {
               </div>
             </Card>
 
-            {/* Security Section */}
-            <Card className="p-6 md:col-span-3 border-orange-200 bg-orange-50">
-              <h3 className="text-xl font-bold text-gray-900 mb-2">ความปลอดภัย</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                ข้อมูลของคุณถูกเก็บไว้ในเครื่องของคุณเท่านั้น
-                และจะไม่ถูกส่งไปยังเซิร์ฟเวอร์ใดๆ
-              </p>
-              <div className="flex items-start gap-2 text-sm text-orange-700">
-                <span className="text-lg">⚠️</span>
-                <p>
-                  หากคุณลบข้อมูลเบราว์เซอร์หรือ localStorage
-                  ข้อมูลทั้งหมดจะหายไปอย่างถาวร
-                </p>
+            {/* Change Password Section */}
+            <Card className="p-6 md:col-span-3">
+              <div className="flex items-center gap-2 mb-4">
+                <KeyRound className="h-5 w-5 text-gray-700" />
+                <h3 className="text-xl font-bold text-gray-900">เปลี่ยนรหัสผ่าน</h3>
               </div>
+
+              {user?.loginMethod === "google" ? (
+                <p className="text-sm text-gray-500">
+                  บัญชีนี้เข้าสู่ระบบด้วย Google ไม่สามารถตั้งรหัสผ่านได้
+                </p>
+              ) : pwStep === "idle" ? (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-600">
+                    กดปุ่มเพื่อรับรหัส OTP ทางอีเมลและตั้งรหัสผ่านใหม่
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRequestPasswordOtp}
+                    disabled={isPwLoading}
+                  >
+                    {isPwLoading ? "กำลังส่ง..." : "เปลี่ยนรหัสผ่าน"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4 max-w-sm">
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                    กรอกรหัส OTP ที่ส่งไปที่ <span className="font-semibold">{user?.email}</span>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="pw-otp">รหัส OTP</Label>
+                    <Input
+                      id="pw-otp"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="6 หลัก"
+                      value={pwOtp}
+                      onChange={(e) => setPwOtp(e.target.value.replace(/\D/g, ""))}
+                      disabled={isPwLoading}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="pw-new">รหัสผ่านใหม่</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="pw-new"
+                        type="password"
+                        placeholder="••••••••"
+                        value={pwNew}
+                        onChange={(e) => setPwNew(e.target.value)}
+                        className="pl-10"
+                        disabled={isPwLoading}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="pw-confirm">ยืนยันรหัสผ่านใหม่</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="pw-confirm"
+                        type="password"
+                        placeholder="••••••••"
+                        value={pwConfirm}
+                        onChange={(e) => setPwConfirm(e.target.value)}
+                        className="pl-10"
+                        disabled={isPwLoading}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setPwStep("idle"); setPwOtp(""); setPwNew(""); setPwConfirm(""); }}
+                      disabled={isPwLoading}
+                    >
+                      ยกเลิก
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={handleChangePassword}
+                      disabled={isPwLoading}
+                    >
+                      {isPwLoading ? "กำลังบันทึก..." : "ยืนยันเปลี่ยนรหัสผ่าน"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* Security Info */}
+            <Card className="p-6 md:col-span-3 border-green-200 bg-green-50">
+              <h3 className="text-base font-semibold text-gray-900 mb-1">ความปลอดภัยของบัญชี</h3>
+              <p className="text-sm text-gray-600">
+                ข้อมูลของคุณถูกเก็บในระบบเซิร์ฟเวอร์อย่างปลอดภัย รหัสผ่านถูกเข้ารหัส (bcrypt) ก่อนจัดเก็บ{" "}
+                หากพบพฤติกรรมผิดปกติ{" "}
+                <Link to="/forgot-password" className="text-green-700 font-medium underline">
+                  เปลี่ยนรหัสผ่านทันที
+                </Link>
+              </p>
             </Card>
           </div>
         </div>

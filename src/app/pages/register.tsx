@@ -20,7 +20,7 @@ export function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const { register, verifyRegisterOtp, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
-  const redirectTo = "/workspace/marketplace";
+  const redirectTo = "/hub";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

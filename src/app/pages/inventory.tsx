@@ -275,10 +275,7 @@ export function Inventory() {
           <h3 className="text-lg font-semibold text-gray-900">พื้นที่ทำงานสินค้า</h3>
         </div>
         <p className="text-sm text-gray-600 mb-4">
-          เลือกตามหมวดหมู่หรือชื่อสินค้า แล้วกดบับเบิลเพื่อเปิดดูรายการ
-        </p>
-        <p className="text-xs text-gray-500 mb-3">
-          กดปุ่ม + หรือ - แล้วใส่ค่าในช่อง value จากนั้นกดยืนยัน ข้อมูลจะถูกบันทึกในประวัติและย้อนกลับได้
+          เลือกดูตามหมวดหมู่หรือชื่อสินค้า กดปุ่ม + / − บนการ์ดเพื่อปรับจำนวน (บันทึกในประวัติและย้อนกลับได้)
         </p>
 
         <div className="mb-4">
@@ -703,7 +700,7 @@ export function Inventory() {
           </DialogHeader>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">value</label>
+            <label className="text-sm font-medium text-gray-700">จำนวน</label>
             <Input
               type="number"
               min="1"
@@ -711,6 +708,7 @@ export function Inventory() {
               value={bubbleAmountInput}
               onChange={(e) => setBubbleAmountInput(e.target.value)}
               placeholder="ใส่จำนวน"
+              autoFocus
             />
           </div>
 

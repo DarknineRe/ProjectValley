@@ -19,6 +19,7 @@ import {
 } from "./ui/select";
 import type { Product } from "../context/data-context";
 import { toast } from "sonner";
+import { ImageUploader } from "./image-uploader";
 
 interface EditProductDialogProps {
   product: Product;
@@ -106,9 +107,10 @@ export function EditProductDialog({
       toast.error("ค่าแจ้งเตือนสต็อกต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป");
       return;
     }
-    if (formData.imageUrl.trim()) {
+    const imageVal = formData.imageUrl.trim();
+    if (imageVal && !imageVal.startsWith("data:")) {
       try {
-        const url = new URL(formData.imageUrl.trim());
+        const url = new URL(imageVal);
         if (url.protocol !== "http:" && url.protocol !== "https:") {
           throw new Error("invalid-protocol");
         }
@@ -268,15 +270,10 @@ export function EditProductDialog({
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="edit-imageUrl">ลิงก์รูปสินค้า</Label>
-              <Input
-                id="edit-imageUrl"
-                type="url"
+              <Label>รูปสินค้า</Label>
+              <ImageUploader
                 value={formData.imageUrl}
-                onChange={(e) =>
-                  setFormData({ ...formData, imageUrl: e.target.value })
-                }
-                placeholder="https://example.com/product.jpg"
+                onChange={(value) => setFormData({ ...formData, imageUrl: value })}
                 disabled={isSubmitting}
               />
             </div>

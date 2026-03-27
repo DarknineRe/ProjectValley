@@ -1,5 +1,8 @@
 const express = require('express');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 const pool = require('./db');
 const nodemailer = require('nodemailer');
 const { fetchMarketPrice, fetchProductCatalog } = require('./market-price-service');
@@ -28,8 +31,33 @@ const OTP_EXPIRE_MS = 5 * 60 * 1000;
 const loginOtpStore = new Map();
 const registerOtpStore = new Map();
 
-app.use(cors());
-app.use(express.json());
+// Security headers
+app.use(helmet());
+
+// CORS — restrict to configured origin in production
+const corsOrigin = process.env.CORS_ORIGIN || '*';
+app.use(cors({ origin: corsOrigin, credentials: true }));
+
+app.use(express.json({ limit: '10mb' }));
+
+// Rate limiters
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10,
+    message: { error: 'Too many attempts, please try again later' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const generalLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 200,
+    message: { error: 'Too many requests, please slow down' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+app.use('/api/', generalLimiter);
 
 function getWorkspaceId(req) {
     return req.query.workspace_id || req.body?.workspaceId || req.headers['x-workspace-id'];
@@ -420,7 +448,7 @@ app.get('/api/workspaces', async (req, res) => {
 
         res.json(Array.from(workspaceMap.values()));
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -980,9 +1008,10 @@ app.post('/api/workspaces/:id/guest-accounts', async (req, res) => {
         if (existingUsers.length > 0) {
             userId = String(existingUsers[0].id);
         } else {
+            const hashedPassword = await bcrypt.hash(String(password), 12);
             const { rows: createdUsers } = await client.query(
                 'INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id',
-                [String(name).trim(), normalizedEmail, String(password), 'farmer']
+                [String(name).trim(), normalizedEmail, hashedPassword, 'farmer']
             );
             userId = String(createdUsers[0].id);
         }
@@ -1058,7 +1087,7 @@ app.put('/api/workspaces/:id/transfer-ownership', async (req, res) => {
             workspace: rows[0]
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -1068,10 +1097,32 @@ function generateOtpCode() {
     return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-function sendOtpByEmail(email, otpCode) {
-    // Placeholder email sender. Integrate SMTP provider later.
-    console.log(`[OTP] Send ${otpCode} to ${email}`);
+function sendOtpByEmail(email, otpCode, subject) {
+    const transport = createMailTransport();
+    const subjectText = subject || 'รหัส OTP สำหรับเข้าสู่ระบบ ProjectValley';
+    if (transport) {
+        const fromAddr = process.env.SMTP_FROM || process.env.SMTP_USER;
+        transport.sendMail({
+            from: `"ProjectValley" <${fromAddr}>`,
+            to: email,
+            subject: subjectText,
+            text: [
+                `รหัส OTP ของคุณคือ: ${otpCode}`,
+                ``,
+                `รหัสนี้จะหมดอายุใน 5 นาที`,
+                `หากคุณไม่ได้ร้องขอ กรุณาเพิกเฉยอีเมลนี้`,
+            ].join('\n'),
+        }).catch((err) => console.error('[OTP] Email send failed:', err.message));
+    } else {
+        // SMTP not configured — log OTP for local development only
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`[OTP] SMTP not configured. OTP for ${email}: ${otpCode}`);
+        }
+    }
 }
+
+// Reset-password OTP store (separate from login/register stores)
+const resetPasswordOtpStore = new Map();
 
 // shared login handler used by both /api/auth/login and /api/login
 async function handleLogin(req, res) {
@@ -1084,26 +1135,48 @@ async function handleLogin(req, res) {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        // Check if user exists in database
-        let users;
+        // Fetch user by email, then verify password separately
+        let foundUser;
         try {
             const result = await pool.query(
-                'SELECT * FROM users WHERE email = $1 AND password = $2',
-                [email, password]
+                'SELECT * FROM users WHERE email = $1 LIMIT 1',
+                [email]
             );
-            users = result.rows;
-            console.log(`[LOGIN] Database query returned ${users.length} user(s)`);
+            foundUser = result.rows[0];
+            console.log(`[LOGIN] Database query returned ${result.rows.length} user(s)`);
         } catch (dbErr) {
             console.error('[LOGIN] Database query failed:', dbErr.message);
             throw dbErr;
         }
 
-        if (users.length === 0) {
+        if (!foundUser) {
             console.warn(`[LOGIN] No user found with email ${email}`);
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        const user = users[0];
+        if (foundUser.password === 'google_oauth') {
+            return res.status(401).json({ error: 'This account uses Google Sign-In. Please sign in with Google.' });
+        }
+
+        // Verify password — support bcrypt hashes and legacy plain-text (auto-rehash)
+        let passwordMatch = false;
+        const stored = foundUser.password || '';
+        const isBcrypt = stored.startsWith('$2b$') || stored.startsWith('$2a$');
+        if (isBcrypt) {
+            passwordMatch = await bcrypt.compare(password, stored);
+        } else if (stored === password) {
+            // Legacy plain-text: matches — rehash transparently
+            passwordMatch = true;
+            const hashed = await bcrypt.hash(password, 12);
+            await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashed, foundUser.id]);
+        }
+
+        if (!passwordMatch) {
+            console.warn(`[LOGIN] Invalid password for ${email}`);
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        const user = foundUser;
 
         const client = await pool.connect();
         try {
@@ -1128,7 +1201,7 @@ async function handleLogin(req, res) {
         });
     } catch (err) {
         console.error('[LOGIN] Error:', err.message, err.stack);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -1162,7 +1235,7 @@ async function handleVerifyLoginOtp(req, res) {
         });
     } catch (err) {
         console.error('[LOGIN OTP VERIFY] Error:', err.message, err.stack);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -1197,6 +1270,7 @@ async function handleRegister(req, res) {
 
         const otpCode = generateOtpCode();
         const expiresAt = Date.now() + OTP_EXPIRE_MS;
+        const hashedPassword = await bcrypt.hash(password, 12);
 
         registerOtpStore.set(String(email).toLowerCase(), {
             code: otpCode,
@@ -1204,7 +1278,7 @@ async function handleRegister(req, res) {
             pendingUser: {
                 name,
                 email,
-                password,
+                password: hashedPassword,
                 role: 'farmer',
             },
         });
@@ -1226,7 +1300,7 @@ async function handleRegister(req, res) {
         res.status(200).json(response);
     } catch (err) {
         console.error('[REGISTER] Error:', err.message, err.stack);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -1304,20 +1378,103 @@ async function handleVerifyRegisterOtp(req, res) {
         });
     } catch (err) {
         console.error('[REGISTER OTP VERIFY] Error:', err.message, err.stack);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
-// mount both canonical and alias routes
-app.post('/api/auth/login', handleLogin);
-app.post('/api/login', handleLogin);
-app.post('/api/auth/login/verify-otp', handleVerifyLoginOtp);
-app.post('/api/login/verify-otp', handleVerifyLoginOtp);
+// mount both canonical and alias routes (rate-limited)
+app.post('/api/auth/login', authLimiter, handleLogin);
+app.post('/api/login', authLimiter, handleLogin);
+app.post('/api/auth/login/verify-otp', authLimiter, handleVerifyLoginOtp);
+app.post('/api/login/verify-otp', authLimiter, handleVerifyLoginOtp);
 
-app.post('/api/auth/register', handleRegister);
-app.post('/api/register', handleRegister);
-app.post('/api/auth/register/verify-otp', handleVerifyRegisterOtp);
-app.post('/api/register/verify-otp', handleVerifyRegisterOtp);
+app.post('/api/auth/register', authLimiter, handleRegister);
+app.post('/api/register', authLimiter, handleRegister);
+app.post('/api/auth/register/verify-otp', authLimiter, handleVerifyRegisterOtp);
+app.post('/api/register/verify-otp', authLimiter, handleVerifyRegisterOtp);
+
+/**
+ * Forgot password — sends an OTP to the user's email
+ * POST /api/auth/forgot-password  { email }
+ */
+app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        const { rows } = await pool.query(
+            'SELECT id, name, email FROM users WHERE email = $1 LIMIT 1',
+            [String(email).toLowerCase().trim()]
+        );
+
+        // Always respond with success to prevent email enumeration
+        if (rows.length === 0) {
+            return res.json({ success: true, message: 'If the email exists, an OTP has been sent' });
+        }
+
+        const user = rows[0];
+        const otpCode = generateOtpCode();
+        const expiresAt = Date.now() + OTP_EXPIRE_MS;
+
+        resetPasswordOtpStore.set(String(email).toLowerCase(), {
+            code: otpCode,
+            expiresAt,
+            userId: user.id,
+        });
+
+        sendOtpByEmail(email, otpCode, 'รหัส OTP สำหรับรีเซ็ตรหัสผ่าน ProjectValley');
+
+        const response = { success: true, message: 'If the email exists, an OTP has been sent' };
+        if (process.env.NODE_ENV !== 'production') {
+            response.devOtp = otpCode;
+        }
+        return res.json(response);
+    } catch (err) {
+        console.error('[FORGOT PASSWORD] Error:', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * Reset password — verify OTP then update password
+ * POST /api/auth/reset-password  { email, otp, newPassword }
+ */
+app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
+    try {
+        const { email, otp, newPassword } = req.body;
+        if (!email || !otp || !newPassword) {
+            return res.status(400).json({ error: 'Email, OTP, and new password are required' });
+        }
+        if (String(newPassword).length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        }
+
+        const key = String(email).toLowerCase();
+        const session = resetPasswordOtpStore.get(key);
+
+        if (!session) {
+            return res.status(400).json({ error: 'OTP session not found. Please request a new one.' });
+        }
+        if (Date.now() > session.expiresAt) {
+            resetPasswordOtpStore.delete(key);
+            return res.status(400).json({ error: 'OTP expired. Please request a new one.' });
+        }
+        if (String(session.code) !== String(otp).trim()) {
+            return res.status(401).json({ error: 'Invalid OTP code' });
+        }
+
+        const hashed = await bcrypt.hash(newPassword, 12);
+        await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashed, session.userId]);
+        resetPasswordOtpStore.delete(key);
+
+        return res.json({ success: true, message: 'Password reset successfully' });
+    } catch (err) {
+        console.error('[RESET PASSWORD] Error:', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 /**
  * Check if user exists
@@ -1338,7 +1495,7 @@ app.get('/api/auth/check-user/:email', async (req, res) => {
         
         res.json({ exists: false });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -1354,41 +1511,22 @@ app.post('/api/auth/google', async (req, res) => {
             return res.status(400).json({ error: 'Google token is required' });
         }
 
-        // Google can return either an ID token (JWT) or an access token.
-        // The frontend currently sends the access_token from useGoogleLogin, which is *not* a JWT.
-        // We'll try to handle both cases.
-
+        // Verify by fetching userinfo from Google — this validates the token server-side
         let email, name;
-
-        const isJwt = token.split('.').length === 3;
-        if (isJwt) {
-            // decode the JWT payload without verifying signature
-            try {
-                const payload = Buffer.from(token.split('.')[1], 'base64').toString('utf-8');
-                const decodedData = JSON.parse(payload);
-                email = decodedData.email;
-                name = decodedData.name || decodedData.email;
-            } catch (decodeErr) {
-                return res.status(401).json({ error: 'Invalid token' });
+        try {
+            const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!resp.ok) {
+                console.error('Google userinfo error:', resp.status);
+                return res.status(401).json({ error: 'Invalid Google token' });
             }
-        } else {
-            // treat as access token: fetch userinfo from Google
-            try {
-                const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (!resp.ok) {
-                    const errText = await resp.text();
-                    console.error('Google userinfo error:', errText);
-                    return res.status(401).json({ error: 'Invalid token' });
-                }
-                const profile = await resp.json();
-                email = profile.email;
-                name = profile.name || profile.email;
-            } catch (fetchErr) {
-                console.error('Failed to fetch Google profile', fetchErr);
-                return res.status(500).json({ error: 'Failed to verify token' });
-            }
+            const profile = await resp.json();
+            email = profile.email;
+            name = profile.name || profile.email;
+        } catch (fetchErr) {
+            console.error('Failed to fetch Google profile', fetchErr.message);
+            return res.status(500).json({ error: 'Failed to verify Google token' });
         }
 
         if (!email) {
@@ -1448,7 +1586,7 @@ app.post('/api/auth/google', async (req, res) => {
         });
     } catch (err) {
         console.error('Google OAuth error:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -1471,7 +1609,7 @@ app.get('/api/products', async (req, res) => {
         );
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -1494,7 +1632,7 @@ app.get('/api/public/products', async (req, res) => {
         `);
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -1517,7 +1655,7 @@ app.get('/api/admin/all-products', async (req, res) => {
         `);
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -1719,7 +1857,7 @@ app.get('/api/schedules', async (req, res) => {
         const { rows } = await pool.query('SELECT * FROM schedules WHERE workspace_id = $1', [workspaceId]);
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -1831,7 +1969,7 @@ app.get('/api/price-history', async (req, res) => {
         const result = Array.from(grouped.values()).filter((row) => Object.keys(row).length > 1);
         res.json(result);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -1844,7 +1982,7 @@ app.get('/api/activity-logs', async (req, res) => {
         const { rows } = await pool.query('SELECT * FROM activity_logs WHERE workspace_id = $1 ORDER BY timestamp DESC LIMIT 50', [workspaceId]);
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -2022,7 +2160,7 @@ app.post('/api/activity-logs/:id/rollback', async (req, res) => {
             await client.query('ROLLBACK');
         } catch {}
         console.error('Rollback error:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     } finally {
         client.release();
     }
@@ -2047,7 +2185,7 @@ app.get('/api/market-prices/products', async (req, res) => {
             }))
         );
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -2071,7 +2209,7 @@ app.get('/api/market-prices', async (req, res) => {
         const priceData = await fetchMarketPrice(product_id, from_date, to_date);
         res.json(priceData);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -2094,7 +2232,7 @@ app.get('/api/market-prices/today', async (req, res) => {
         const priceData = await fetchMarketPrice(product_id, today, today);
         res.json(priceData);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -2142,7 +2280,7 @@ app.get('/api/market-prices/history/:product_id', async (req, res) => {
         rows.sort((a, b) => String(b.date).localeCompare(String(a.date)));
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -2181,7 +2319,7 @@ app.get('/api/market-prices/latest', async (req, res) => {
 
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -2229,7 +2367,7 @@ app.post('/api/market-prices/compare', async (req, res) => {
             count: rows.length
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -2355,7 +2493,7 @@ app.post('/api/item-requests', async (req, res) => {
         }
         res.json({ id, status: 'pending' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -2378,7 +2516,7 @@ app.get('/api/item-requests', async (req, res) => {
         const { rows } = await pool.query(sql, params);
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
@@ -2418,7 +2556,7 @@ app.patch('/api/item-requests/:id', async (req, res) => {
         res.json(updated.rows[0]);
     } catch (err) {
         await client.query('ROLLBACK');
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
     } finally {
         client.release();
     }

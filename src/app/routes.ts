@@ -12,6 +12,7 @@ import { Hub } from "./pages/hub";
 import { Profile } from "./pages/profile";
 import { PriceSearch } from "./pages/price-search";
 import { MarketplaceStandalone } from "./pages/marketplace-standalone";
+import { ForgotPassword } from "./pages/forgot-password";
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +26,10 @@ export const router = createBrowserRouter([
   {
     path: "/register",
     Component: Register,
+  },
+  {
+    path: "/forgot-password",
+    Component: ForgotPassword,
   },
   {
     path: "/hub",

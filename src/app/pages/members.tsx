@@ -35,7 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
-import { Users, UserPlus, Copy, CheckCircle, Code, Crown, User, Trash2 } from "lucide-react";
+import { Users, UserPlus, Crown, User, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { th } from "date-fns/locale";
@@ -57,7 +57,6 @@ export function Members() {
   const [guestName, setGuestName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [guestPassword, setGuestPassword] = useState("");
-  const [copied, setCopied] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isTransferOwnershipDialogOpen, setIsTransferOwnershipDialogOpen] = useState(false);
@@ -82,15 +81,6 @@ export function Members() {
 
   const getMemberLabel = (member: WorkspaceMember) => {
     return member.canAdd ? "ผู้ค้า" : "ผู้เยี่ยมชม";
-  };
-
-  const handleCopyCode = () => {
-    if (currentWorkspace) {
-      navigator.clipboard.writeText(currentWorkspace.code);
-      setCopied(true);
-      toast.success("คัดลอกรหัสสำเร็จ!");
-      setTimeout(() => setCopied(false), 2000);
-    }
   };
 
   const handleInvite = async () => {
@@ -200,6 +190,16 @@ export function Members() {
       <div className="text-center py-12">
         <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
         <p className="text-gray-500">กรุณาเลือก Workspace ก่อน</p>
+      </div>
+    );
+  }
+
+  // Only allow owners, admins, or users with permission to manage members
+  if (!isWorkspaceOwner && !isGlobalAdmin && !canManagePermissions) {
+    return (
+      <div className="text-center py-12">
+        <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+        <p className="text-gray-500">คุณไม่มีสิทธิ์ในการเข้าถึงหน้านี้</p>
       </div>
     );
   }
@@ -329,45 +329,6 @@ export function Members() {
         <p className="mt-1 text-sm text-slate-700">
           1) เปิดสิทธิ์ดูข้อมูล 2) เลือกบทบาทลัด (ผู้เยี่ยมชม/ผู้ค้า/ผู้จัดการ) 3) กดปุ่มตั้งค่าหน้าเพื่อปรับรายหน้าตามต้องการ
         </p>
-      </Card>
-
-      {/* Workspace Info Card */}
-      <Card className="p-6 bg-white">
-        <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              รหัส Workspace
-            </h3>
-            <p className="text-sm text-gray-600 mb-3">
-              แชร์รหัสนี้กับคนที่คุณต้องการเชิญเข้าร่วม
-            </p>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-white px-4 py-3 rounded-lg border">
-                <Code className="h-5 w-5 text-slate-700" />
-                <span className="font-mono text-2xl font-bold text-gray-900">
-                  {currentWorkspace.code}
-                </span>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleCopyCode}
-                className="flex items-center gap-2"
-              >
-                {copied ? (
-                  <>
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    คัดลอกแล้ว
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4" />
-                    คัดลอก
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
       </Card>
 
       {/* Summary Cards */}

@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "./ui/select";
 import { toast } from "sonner";
+import { ImageUploader } from "./image-uploader";
 
 interface AddProductDialogProps {
   open: boolean;
@@ -362,15 +363,10 @@ export function AddProductDialog({
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="imageUrl">ลิงก์รูปสินค้า</Label>
-              <Input
-                id="imageUrl"
-                type="url"
+              <Label>รูปสินค้า</Label>
+              <ImageUploader
                 value={formData.imageUrl}
-                onChange={(e) =>
-                  setFormData({ ...formData, imageUrl: e.target.value })
-                }
-                placeholder="https://example.com/product.jpg"
+                onChange={(value) => setFormData({ ...formData, imageUrl: value })}
               />
             </div>
           </div>

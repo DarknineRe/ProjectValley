@@ -15,7 +15,7 @@ export function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
-  const redirectTo = "/workspace/marketplace";
+  const redirectTo = "/hub";
 
   useEffect(() => {
     const savedUser = localStorage.getItem("currentUser");
@@ -95,7 +95,15 @@ export function Login() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">รหัสผ่าน</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">รหัสผ่าน</Label>
+              <Link
+                to="/forgot-password"
+                className="text-xs text-green-600 hover:text-green-700"
+              >
+                ลืมรหัสผ่าน?
+              </Link>
+            </div>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
