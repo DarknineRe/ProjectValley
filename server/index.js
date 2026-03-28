@@ -706,8 +706,8 @@ app.delete('/api/workspaces/:id', async (req, res) => {
 
         const isGlobalAdmin = isGlobalAdminUser(requesterRows[0]);
 
-        if (!isGlobalAdmin && workspaceRows[0].owner_id !== String(userId)) {
-            return res.status(403).json({ error: 'Only workspace owner can delete this workspace' });
+        if (!isGlobalAdmin) {
+            return res.status(403).json({ error: 'Only a global admin can delete a workspace' });
         }
 
         await client.query('BEGIN');
@@ -1674,6 +1674,7 @@ app.post('/api/products', async (req, res) => {
             sellerName,
             minStock,
             harvestDate,
+            expireDate,
             lastUpdated,
         } = req.body;
 
@@ -1721,8 +1722,8 @@ app.post('/api/products', async (req, res) => {
         }
         const id = Date.now().toString();
         const insertSql = `
-            INSERT INTO products (id, workspace_id, name, category, quantity, unit, price, image_url, seller_id, seller_name, minStock, harvestDate, lastUpdated)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            INSERT INTO products (id, workspace_id, name, category, quantity, unit, price, image_url, seller_id, seller_name, minStock, harvestDate, expireDate, lastUpdated)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             RETURNING *
         `;
 
@@ -1738,7 +1739,8 @@ app.post('/api/products', async (req, res) => {
             String(sellerId),
             String(sellerName),
             minStock,
-            harvestDate,
+            harvestDate || null,
+            expireDate || null,
             lastUpdated,
         ]);
         res.status(201).json(insertResult.rows[0]);
@@ -1762,6 +1764,7 @@ app.put('/api/products/:id', async (req, res) => {
             sellerName,
             minStock,
             harvestDate,
+            expireDate,
             lastUpdated,
         } = req.body;
 
@@ -1808,8 +1811,8 @@ app.put('/api/products/:id', async (req, res) => {
         }
         const sql = `
             UPDATE products
-            SET name=$1, category=$2, quantity=$3, unit=$4, price=$5, image_url=$6, seller_id=$7, seller_name=$8, minStock=$9, harvestDate=$10, lastUpdated=$11
-            WHERE id=$12 AND workspace_id=$13
+            SET name=$1, category=$2, quantity=$3, unit=$4, price=$5, image_url=$6, seller_id=$7, seller_name=$8, minStock=$9, harvestDate=$10, expireDate=$11, lastUpdated=$12
+            WHERE id=$13 AND workspace_id=$14
             RETURNING *
         `;
 
@@ -1823,7 +1826,8 @@ app.put('/api/products/:id', async (req, res) => {
             String(sellerId),
             String(sellerName),
             minStock,
-            harvestDate,
+            harvestDate || null,
+            expireDate || null,
             lastUpdated,
             req.params.id,
             workspaceId,
@@ -2044,8 +2048,8 @@ app.post('/api/activity-logs/:id/rollback', async (req, res) => {
                 const prev = details?.previous || details?.prev || details?.old;
                 if (!prev) throw new Error('No previous product data');
                 await client.query(
-                    `INSERT INTO products (id,workspace_id,name,category,quantity,unit,minStock,harvestDate,lastUpdated)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                    `INSERT INTO products (id,workspace_id,name,category,quantity,unit,minStock,harvestDate,expireDate,lastUpdated)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
                      ON CONFLICT (id) DO UPDATE SET
                         workspace_id = EXCLUDED.workspace_id,
                         name = EXCLUDED.name,
@@ -2054,6 +2058,7 @@ app.post('/api/activity-logs/:id/rollback', async (req, res) => {
                         unit = EXCLUDED.unit,
                         minStock = EXCLUDED.minStock,
                         harvestDate = EXCLUDED.harvestDate,
+                        expireDate = EXCLUDED.expireDate,
                         lastUpdated = EXCLUDED.lastUpdated`,
                     [
                         prev.id,
@@ -2064,6 +2069,7 @@ app.post('/api/activity-logs/:id/rollback', async (req, res) => {
                         prev.unit,
                         prev.minStock ?? prev.minstock ?? 0,
                         prev.harvestDate ?? prev.harvestdate ?? null,
+                        prev.expireDate ?? prev.expiredate ?? null,
                         prev.lastUpdated ?? prev.lastupdated ?? new Date().toISOString(),
                     ]
                 );
@@ -2071,7 +2077,7 @@ app.post('/api/activity-logs/:id/rollback', async (req, res) => {
                 const prev = details?.previous || details?.prev || details?.old;
                 if (!prev) throw new Error('No previous product data');
                 await client.query(
-                    `UPDATE products SET name=$1, category=$2, quantity=$3, unit=$4, minStock=$5, harvestDate=$6, lastUpdated=$7 WHERE id=$8 AND workspace_id=$9`,
+                    `UPDATE products SET name=$1, category=$2, quantity=$3, unit=$4, minStock=$5, harvestDate=$6, expireDate=$7, lastUpdated=$8 WHERE id=$9 AND workspace_id=$10`,
                     [
                         prev.name,
                         prev.category,
@@ -2079,6 +2085,7 @@ app.post('/api/activity-logs/:id/rollback', async (req, res) => {
                         prev.unit,
                         prev.minStock ?? prev.minstock ?? 0,
                         prev.harvestDate ?? prev.harvestdate ?? null,
+                        prev.expireDate ?? prev.expiredate ?? null,
                         prev.lastUpdated ?? prev.lastupdated ?? new Date().toISOString(),
                         prev.id,
                         workspaceId,
@@ -2561,6 +2568,25 @@ app.patch('/api/item-requests/:id', async (req, res) => {
         client.release();
     }
 });
+
+// --- Expired product cleanup ---
+
+async function deleteExpiredProducts() {
+    try {
+        const result = await pool.query(
+            `DELETE FROM products WHERE expireDate IS NOT NULL AND expireDate < CURRENT_DATE RETURNING id, name`
+        );
+        if (result.rows.length > 0) {
+            console.log(`[cleanup] Deleted ${result.rows.length} expired product(s):`, result.rows.map(r => r.name).join(', '));
+        }
+    } catch (err) {
+        console.error('[cleanup] Failed to delete expired products:', err.message);
+    }
+}
+
+// Run on startup and every hour
+deleteExpiredProducts();
+setInterval(deleteExpiredProducts, 60 * 60 * 1000);
 
 // --- Start Server ---
 

@@ -302,24 +302,24 @@ export function Members() {
             เชิญสมาชิก
           </Button>
           {(isWorkspaceOwner || isGlobalAdmin) && (
-            <>
-              <Button
-                variant="outline"
-                className="text-slate-700 hover:text-slate-900"
-                onClick={() => setIsTransferOwnershipDialogOpen(true)}
-              >
-                <Crown className="h-4 w-4 mr-2" />
-                โอนความเป็นเจ้าของ
-              </Button>
-              <Button
-                variant="outline"
-                className="text-red-600 hover:text-red-700"
-                onClick={() => setIsDeleteConfirmOpen(true)}
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                ลบ Workspace
-              </Button>
-            </>
+            <Button
+              variant="outline"
+              className="text-slate-700 hover:text-slate-900"
+              onClick={() => setIsTransferOwnershipDialogOpen(true)}
+            >
+              <Crown className="h-4 w-4 mr-2" />
+              โอนความเป็นเจ้าของ
+            </Button>
+          )}
+          {isGlobalAdmin && (
+            <Button
+              variant="outline"
+              className="text-red-600 hover:text-red-700"
+              onClick={() => setIsDeleteConfirmOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              ลบ Workspace
+            </Button>
           )}
         </div>
       </div>

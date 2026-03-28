@@ -59,6 +59,7 @@ export function AddProductDialog({
     minStock: "",
     unit: "",
     harvestDate: "",
+    expireDate: "",
     imageUrl: "",
   });
 
@@ -201,6 +202,7 @@ export function AddProductDialog({
         price: Number(formData.price),
         minStock: Number(formData.minStock || 0),
         harvestDate: formData.harvestDate || undefined,
+        expireDate: formData.expireDate ? new Date(formData.expireDate) : undefined,
         imageUrl: formData.imageUrl.trim() || undefined,
       });
 
@@ -213,6 +215,7 @@ export function AddProductDialog({
         minStock: "",
         unit: "",
         harvestDate: "",
+        expireDate: "",
         imageUrl: "",
       });
       onOpenChange(false);
@@ -358,6 +361,18 @@ export function AddProductDialog({
                 value={formData.harvestDate}
                 onChange={(e) =>
                   setFormData({ ...formData, harvestDate: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="expireDate">วันหมดอายุ</Label>
+              <Input
+                id="expireDate"
+                type="date"
+                value={formData.expireDate}
+                onChange={(e) =>
+                  setFormData({ ...formData, expireDate: e.target.value })
                 }
               />
             </div>

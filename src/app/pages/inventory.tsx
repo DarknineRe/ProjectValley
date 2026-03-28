@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import { Search, Edit, Trash2, AlertCircle, Plus, FolderOpen, Minus, Loader2 } from "lucide-react";
+import { Search, Edit, Trash2, AlertCircle, Plus, FolderOpen, Minus, Loader2, Clock } from "lucide-react";
 import type { Product } from "../context/data-context";
 import { EditProductDialog } from "../components/edit-product-dialog";
 import { AddProductDialog } from "../components/add-product-dialog";
@@ -137,6 +137,18 @@ export function Inventory() {
       return { label: "สินค้าใกล้หมด", variant: "secondary" as const };
     }
     return { label: "มีสินค้า", variant: "default" as const };
+  };
+
+  const getExpireStatus = (product: Product): "expired" | "soon" | "ok" | "none" => {
+    if (!product.expireDate) return "none";
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const exp = new Date(product.expireDate);
+    exp.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return "expired";
+    if (diffDays <= 3) return "soon";
+    return "ok";
   };
 
   const lowStockProducts = products
@@ -517,13 +529,14 @@ export function Inventory() {
                 <TableHead className="text-right">จำนวน</TableHead>
                 <TableHead>สถานะ</TableHead>
                 <TableHead>วันที่เก็บเกี่ยว</TableHead>
+                <TableHead>วันหมดอายุ</TableHead>
                 <TableHead className="text-center">จัดการ</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={9} className="text-center py-8">
                     <div className="flex flex-col items-center gap-2">
                       <AlertCircle className="h-8 w-8 text-gray-400" />
                       <p className="text-gray-500">ไม่พบสินค้า</p>
@@ -536,7 +549,7 @@ export function Inventory() {
                   const canManage = canManageProduct(product);
 
                   return (
-                    <TableRow key={product.id}>
+                    <TableRow key={product.id} className={getExpireStatus(product) === "expired" ? "opacity-60 bg-red-50" : ""}>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-3">
                           {product.imageUrl ? (
@@ -581,6 +594,18 @@ export function Inventory() {
                               year: "numeric",
                             })
                           : "-"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {product.expireDate ? (
+                          <div className="flex items-center gap-1.5">
+                            <Clock className={`h-3.5 w-3.5 ${getExpireStatus(product) === "expired" ? "text-red-500" : getExpireStatus(product) === "soon" ? "text-amber-500" : "text-gray-400"}`} />
+                            <span className={getExpireStatus(product) === "expired" ? "text-red-600 font-medium" : getExpireStatus(product) === "soon" ? "text-amber-600 font-medium" : ""}>
+                              {new Date(product.expireDate).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" })}
+                            </span>
+                            {getExpireStatus(product) === "expired" && <Badge variant="destructive" className="text-[10px] px-1 py-0">หมดอายุ</Badge>}
+                            {getExpireStatus(product) === "soon" && <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 text-[10px] px-1 py-0">ใกล้หมด</Badge>}
+                          </div>
+                        ) : "-"}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-2">

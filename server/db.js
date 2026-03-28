@@ -315,6 +315,9 @@ async function initializeDatabase() {
         await client.query(`
             ALTER TABLE products ALTER COLUMN seller_name SET NOT NULL;
         `);
+        await client.query(`
+            ALTER TABLE products ADD COLUMN IF NOT EXISTS expireDate VARCHAR(255);
+        `);
 
         await client.query(`
             CREATE TABLE IF NOT EXISTS schedules (

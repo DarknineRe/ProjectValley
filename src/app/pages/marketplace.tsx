@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "../context/auth-context";
 import { useWorkspace } from "../context/workspace-context";
+import { useData } from "../context/data-context";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
@@ -8,7 +9,7 @@ import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
 import { Skeleton } from "../components/ui/skeleton";
-import { Search, Store, Package2, Users, Filter, Edit, Trash2, MessageSquarePlus, Check, X } from "lucide-react";
+import { Search, Store, Package2, Users, Filter, Edit, Trash2, MessageSquarePlus, Check, X, Clock } from "lucide-react";
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import { EditProductDialog } from "../components/edit-product-dialog";
 import { toast } from "sonner";
@@ -53,6 +54,7 @@ export interface Product {
   sellerName: string;
   minStock: number;
   harvestDate?: Date;
+  expireDate?: Date;
   lastUpdated: Date;
   workspace_id?: string;
   workspace_name?: string;
@@ -75,6 +77,7 @@ interface ItemChangeRequest {
 export function Marketplace() {
   const { user } = useAuth();
   const { isGlobalAdmin } = useWorkspace();
+  const { refreshData } = useData();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -112,6 +115,7 @@ export function Marketplace() {
             sellerName: p.workspace_owner_name ?? p.workspaceOwnerName ?? p.seller_name ?? p.sellerName ?? 'ไม่ระบุผู้ขาย',
             minStock: p.minstock ?? p.minStock ?? 0,
             harvestDate: p.harvestdate ? new Date(p.harvestdate) : p.harvestDate ? new Date(p.harvestDate) : undefined,
+            expireDate: p.expiredate ? new Date(p.expiredate) : p.expireDate ? new Date(p.expireDate) : undefined,
             lastUpdated: p.lastupdated ? new Date(p.lastupdated) : p.lastUpdated ? new Date(p.lastUpdated) : new Date(),
             workspace_id: p.workspace_id,
             workspace_name: p.workspace_name ?? 'ไม่ระบุ Workspace',
@@ -186,6 +190,18 @@ export function Marketplace() {
   }, [categories.length, products]);
 
   const hasActiveFilters = search.trim().length > 0 || categoryFilter !== "ทั้งหมด";
+
+  const getExpireStatus = (expireDate?: Date): "expired" | "soon" | "ok" | "none" => {
+    if (!expireDate) return "none";
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const exp = new Date(expireDate);
+    exp.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return "expired";
+    if (diffDays <= 3) return "soon";
+    return "ok";
+  };
 
   const canManageOffer = (sellerId: string) => {
     return sellerId === user?.id;
@@ -271,26 +287,21 @@ export function Marketplace() {
         body: JSON.stringify({ status }),
       });
       if (res.ok) {
+        const req = ownerRequests.find((r) => r.id === requestId);
         setOwnerRequests((prev) => prev.filter((r) => r.id !== requestId));
         toast.success(status === "accepted" ? "ยืนยันคำขอเรียบร้อยแล้ว" : "ปฏิเสธคำขอเรียบร้อยแล้ว");
-        if (status === "accepted") {
-          setProducts((prev) => prev.filter((product) => {
-            const req = ownerRequests.find((r) => r.id === requestId);
-            if (!req) return true;
-            if (req.request_type === "delete") {
-              return product.id !== req.product_id;
-            }
-            return true;
-          }).map((product) => {
-            const req = ownerRequests.find((r) => r.id === requestId);
-            if (!req || req.request_type !== "decrease" || product.id !== req.product_id) {
-              return product;
-            }
-            return {
-              ...product,
-              quantity: Math.max(0, product.quantity - Number(req.decrease_by || 0)),
-            };
-          }));
+        if (status === "accepted" && req) {
+          if (req.request_type === "delete") {
+            setProducts((prev) => prev.filter((p) => p.id !== req.product_id));
+          } else if (req.request_type === "decrease") {
+            setProducts((prev) => prev.map((p) =>
+              p.id === req.product_id
+                ? { ...p, quantity: Math.max(0, p.quantity - Number(req.decrease_by || 0)) }
+                : p
+            ));
+          }
+          // Sync the inventory page's data-context so it also reflects the change
+          refreshData();
         }
       } else {
         toast.error("ไม่สามารถอัปเดตคำขอได้");
@@ -524,11 +535,23 @@ export function Marketplace() {
                   {offer.quantity <= offer.minStock && offer.minStock > 0 && (
                     <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">สต็อกใกล้หมด</Badge>
                   )}
+                  {getExpireStatus(offer.expireDate) === "expired" && (
+                    <Badge variant="destructive">หมดอายุ</Badge>
+                  )}
+                  {getExpireStatus(offer.expireDate) === "soon" && (
+                    <Badge className="bg-orange-100 text-orange-800 hover:bg-orange-100">ใกล้หมดอายุ</Badge>
+                  )}
                 </div>
 
                 <div className="space-y-1 text-sm text-gray-600">
                   <p>ผู้ขาย: {offer.sellerName}</p>
                   <p>คงเหลือ {offer.quantity.toLocaleString("th-TH")} {offer.unit}</p>
+                  {offer.expireDate && (
+                    <p className={`flex items-center gap-1 ${getExpireStatus(offer.expireDate) === "expired" ? "text-red-600 font-medium" : getExpireStatus(offer.expireDate) === "soon" ? "text-orange-600 font-medium" : ""}`}>
+                      <Clock className="h-3.5 w-3.5" />
+                      หมดอายุ {dateFormatter.format(offer.expireDate)}
+                    </p>
+                  )}
                   <p>อัปเดตล่าสุด {dateFormatter.format(offer.lastUpdated)}</p>
                 </div>
 

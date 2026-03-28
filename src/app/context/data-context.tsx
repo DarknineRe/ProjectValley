@@ -15,7 +15,8 @@ export interface Product {
   sellerId: string;
   sellerName: string;
   minStock: number;
-  harvestDate?: Date; // วันที่เก็บเกี่ยว
+  harvestDate?: Date;
+  expireDate?: Date;
   lastUpdated: Date;
 }
 
@@ -73,6 +74,7 @@ interface DataContextType {
   activityLogs: ActivityLog[];
   rollbackActivity: (log: ActivityLog) => Promise<void>;
   isLoading: boolean;
+  refreshData: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -135,6 +137,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     sellerName: row.seller_name ?? row.sellerName ?? row.sellername ?? "ไม่ระบุผู้ขาย",
     minStock: row.minstock ?? row.minStock ?? 0,
     harvestDate: row.harvestdate ? new Date(row.harvestdate) : row.harvestDate ? new Date(row.harvestDate) : undefined,
+    expireDate: row.expiredate ? new Date(row.expiredate) : row.expireDate ? new Date(row.expireDate) : undefined,
     lastUpdated: row.lastupdated ? new Date(row.lastupdated) : row.lastUpdated ? new Date(row.lastUpdated) : new Date()
   });
 
@@ -147,7 +150,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return true;
     }
 
-    return Boolean(user?.id) && product.sellerId === user.id;
+    return Boolean(user?.id) && product.sellerId === user?.id;
   };
 
   const normalizeSchedule = (row: any) => ({
@@ -617,7 +620,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setUserRole,
         activityLogs,
         rollbackActivity,
-        isLoading
+        isLoading,
+        refreshData: loadData,
       }}
     >
       {children}

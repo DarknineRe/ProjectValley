@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
-import { Package, Calendar, BarChart3, Menu, ClipboardList, BarChart2, User, Users, Building2, LogOut, Store, Loader2 } from "lucide-react";
+import { Package, Calendar, BarChart3, Menu, ClipboardList, BarChart2, Users, Building2, LogOut, Store, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "./ui/sheet";
 import { useState, useEffect } from "react";
@@ -7,14 +7,6 @@ import { useWorkspace } from "../context/workspace-context";
 import { useAuth } from "../context/auth-context";
 import { Badge } from "./ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
 type RoleMode = "admin" | "merchant" | "buyer";
 
 const navItems = [
@@ -91,10 +83,6 @@ export function Layout() {
   const handleLogout = () => {
     logout();
     navigate("/");
-  };
-
-  const handleChangeWorkspace = () => {
-    navigate("/hub");
   };
 
   const getInitials = (name: string) => {
@@ -202,53 +190,26 @@ export function Layout() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleChangeWorkspace}
+                onClick={handleLogout}
+                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
               >
-                <Building2 className="h-4 w-4 mr-2" />
-                เปลี่ยน
+                <LogOut className="h-4 w-4 mr-2" />
+                ออกจากระบบ
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex items-center gap-2 hover:bg-green-50"
-                  >
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={user?.photoUrl} />
-                      <AvatarFallback className="bg-green-100 text-green-700">
-                        {user ? getInitials(user.name) : "U"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="hidden md:inline">{user?.name}</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">
-                        {user?.name}
-                      </p>
-                      <p className="text-xs leading-none text-gray-500">
-                        {user?.email}
-                      </p>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate("/profile")}>
-                    <User className="h-4 w-4 mr-2" />
-                    โปรไฟล์
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={handleLogout}
-                    className="text-red-600 focus:text-red-600"
-                  >
-                    <LogOut className="h-4 w-4 mr-2" />
-                    ออกจากระบบ
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/profile")}
+                className="flex items-center gap-2 hover:bg-green-50"
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={user?.photoUrl} />
+                  <AvatarFallback className="bg-green-100 text-green-700">
+                    {user ? getInitials(user.name) : "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="hidden md:inline">{user?.name}</span>
+              </Button>
             </div>
           </div>
         </div>

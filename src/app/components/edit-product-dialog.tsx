@@ -58,6 +58,9 @@ export function EditProductDialog({
     harvestDate: product.harvestDate
       ? new Date(product.harvestDate).toISOString().split("T")[0]
       : "",
+    expireDate: product.expireDate
+      ? new Date(product.expireDate).toISOString().split("T")[0]
+      : "",
   });
 
   useEffect(() => {
@@ -71,6 +74,9 @@ export function EditProductDialog({
       imageUrl: product.imageUrl || "",
       harvestDate: product.harvestDate
         ? new Date(product.harvestDate).toISOString().split("T")[0]
+        : "",
+      expireDate: product.expireDate
+        ? new Date(product.expireDate).toISOString().split("T")[0]
         : "",
     });
   }, [product]);
@@ -132,6 +138,7 @@ export function EditProductDialog({
         minStock,
         imageUrl: formData.imageUrl.trim() || undefined,
         harvestDate: formData.harvestDate ? new Date(formData.harvestDate) : undefined,
+        expireDate: formData.expireDate ? new Date(formData.expireDate) : undefined,
       });
 
       onOpenChange(false);
@@ -264,6 +271,19 @@ export function EditProductDialog({
                 value={formData.harvestDate}
                 onChange={(e) =>
                   setFormData({ ...formData, harvestDate: e.target.value })
+                }
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-expireDate">วันหมดอายุ</Label>
+              <Input
+                id="edit-expireDate"
+                type="date"
+                value={formData.expireDate}
+                onChange={(e) =>
+                  setFormData({ ...formData, expireDate: e.target.value })
                 }
                 disabled={isSubmitting}
               />
