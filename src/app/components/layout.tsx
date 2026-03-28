@@ -7,6 +7,7 @@ import { useWorkspace } from "../context/workspace-context";
 import { useAuth } from "../context/auth-context";
 import { Badge } from "./ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { API_BASE } from "../../api";
 type RoleMode = "admin" | "merchant" | "buyer";
 
 const navItems = [
@@ -23,6 +24,7 @@ export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
   const { currentWorkspace, isLoading, isGlobalAdmin, getUserRole, getUserPermissions } = useWorkspace();
   const { user, logout, isAuthenticated } = useAuth();
   const userRole = getUserRole();
@@ -80,6 +82,24 @@ export function Layout() {
     }
   }, [isAuthenticated, isLoading, currentWorkspace, accessibleNavItems, location.pathname, navigate]);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setPendingRequestCount(0);
+      return;
+    }
+    const loadCount = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/item-requests?seller_id=${encodeURIComponent(user.id)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setPendingRequestCount((Array.isArray(data) ? data : []).filter((r: any) => r.status === "pending").length);
+      } catch {}
+    };
+    loadCount();
+    const interval = setInterval(loadCount, 60_000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
   const handleLogout = () => {
     logout();
     navigate("/");
@@ -118,6 +138,7 @@ export function Layout() {
       {accessibleNavItems.map((item) => {
         const Icon = item.icon;
         const isActive = location.pathname === item.path;
+        const showBadge = item.path === "/marketplace" && pendingRequestCount > 0;
         return (
           <Link
             key={item.path}
@@ -131,6 +152,11 @@ export function Layout() {
           >
             <Icon className="h-5 w-5" />
             <span className="font-medium">{item.label}</span>
+            {showBadge && (
+              <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+                {pendingRequestCount}
+              </span>
+            )}
           </Link>
         );
       })}

@@ -1,20 +1,39 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Store, ArrowLeft, User } from "lucide-react";
+import { Store, ArrowLeft, User, Bell } from "lucide-react";
+import { API_BASE } from "../../api";
 import { Button } from "../components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { useAuth } from "../context/auth-context";
+import { useWorkspace } from "../context/workspace-context";
 import { Marketplace } from "./marketplace";
 
 export function MarketplaceStandalone() {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
+  const { currentWorkspace } = useWorkspace();
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     if (!isAuthenticated) {
       navigate("/login");
     }
   }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const loadCount = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/item-requests?seller_id=${encodeURIComponent(user.id)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setPendingCount((Array.isArray(data) ? data : []).filter((r: any) => r.status === "pending").length);
+      } catch {}
+    };
+    loadCount();
+    const interval = setInterval(loadCount, 60_000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
   if (!isAuthenticated) {
     return null;
@@ -44,10 +63,18 @@ export function MarketplaceStandalone() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => navigate("/hub")}> 
+            <Button variant="outline" onClick={() => navigate(currentWorkspace ? "/workspace/inventory" : "/hub")}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               กลับหน้า Workspace
             </Button>
+            {pendingCount > 0 && (
+              <div className="relative flex items-center">
+                <Bell className="h-5 w-5 text-gray-600" />
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+                  {pendingCount}
+                </span>
+              </div>
+            )}
             <Button variant="ghost" onClick={() => navigate("/profile")}> 
               <Avatar className="h-8 w-8">
                 <AvatarImage src={user?.photoUrl} />

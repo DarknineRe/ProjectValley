@@ -25,6 +25,7 @@ interface EditProductDialogProps {
   product: Product;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 const categories = [
@@ -44,6 +45,7 @@ export function EditProductDialog({
   product,
   open,
   onOpenChange,
+  onSuccess,
 }: EditProductDialogProps) {
   const { updateProduct } = useData();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -141,6 +143,7 @@ export function EditProductDialog({
         expireDate: formData.expireDate ? new Date(formData.expireDate) : undefined,
       });
 
+      onSuccess?.();
       onOpenChange(false);
     } finally {
       setIsSubmitting(false);

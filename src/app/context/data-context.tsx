@@ -404,21 +404,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateProduct = async (updatedProduct: Product) => {
+  const updateProduct = async (updatedProduct: Product & { workspace_id?: string }) => {
     try {
-      if (!currentWorkspace?.id) {
+      // Use the product's own workspace_id (set by marketplace) or fall back to currentWorkspace
+      const effectiveWorkspaceId = (updatedProduct as any).workspace_id || currentWorkspace?.id;
+      if (!effectiveWorkspaceId) {
         throw new Error("กรุณาเลือกพื้นที่ทำงานก่อน");
       }
       ensureCanEdit();
       const oldProduct = products.find(p => p.id === updatedProduct.id);
-      if (!oldProduct) {
+      // oldProduct may not exist when editing from marketplace (different workspace context) — allow it if workspace_id is explicit
+      if (!oldProduct && !((updatedProduct as any).workspace_id)) {
         throw new Error("ไม่พบสินค้า");
       }
-      if (!canModifyProduct(oldProduct)) {
+      if (oldProduct && !canModifyProduct(oldProduct)) {
         throw new Error("คุณแก้ไขได้เฉพาะสินค้าของตัวเอง");
       }
-      const payload = { ...updatedProduct, workspaceId: currentWorkspace.id, lastUpdated: new Date().toISOString() };
-      const workspaceQuery = `workspace_id=${encodeURIComponent(currentWorkspace.id)}`;
+      const payload = { ...updatedProduct, workspaceId: effectiveWorkspaceId, lastUpdated: new Date().toISOString() };
+      const workspaceQuery = `workspace_id=${encodeURIComponent(effectiveWorkspaceId)}`;
       const res = await fetch(`${API_BASE}/api/products/${updatedProduct.id}?${workspaceQuery}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
